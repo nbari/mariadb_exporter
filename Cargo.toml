@@ -1,0 +1,103 @@
+[package]
+name = "mariadb_exporter"
+version = "0.1.0"
+edition = "2024"
+authors = ["Nicolas Embriz <nbari@tequila.io>"]
+description = "MariaDB metric exporter for Prometheus"
+documentation = "https://docs.rs/mariadb_exporter/latest/mariadb_exporter/"
+readme = "README.md"
+repository = "https://github.com/nbari/mariadb_exporter"
+keywords = ["mariadb", "mysql", "prometheus", "metrics", "exporter"]
+categories = ["command-line-utilities", "network-programming", "database"]
+license = "BSD-3-Clause"
+
+[lints.rust]
+warnings = "deny"
+
+[lints.clippy]
+# Allow unstable/opinionated lints (lower priority so individual lints can override)
+nursery = { level = "allow", priority = -1 }
+
+# Enforce pedantic lints
+pedantic = "deny"
+
+# Core lint groups
+all = "deny"
+correctness = "deny"
+suspicious = "deny"
+perf = "deny"
+complexity = "deny"
+
+# Safety-critical lints
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+await_holding_lock = "deny"
+
+# Performance + memory reliability
+needless_borrow = "deny"
+needless_collect = "deny"
+large_stack_arrays = "deny"
+
+[dependencies]
+anyhow = "1.0"
+axum = { version = "0.8.6", features = ["tracing"] }
+chrono = "0.4.42"
+clap = { version = "4.5.48", features = ["env"] }
+opentelemetry = "0.31.0"
+opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["grpc-tonic", "gzip-tonic", "tls", "tls-roots", "trace"] }
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
+secrecy = "0.10"
+serde = "1.0"
+serde_json = "1.0"
+sqlx = { version = "0.8.6", features = ["mysql", "runtime-tokio", "tls-rustls"] }
+tokio = { version = "1.47.1", features = ["full"] }
+tower = "0.5.2"
+tower-http = { version = "0.6.6", features = ["request-id", "set-header", "trace"] }
+tracing = "0.1.41"
+tracing-opentelemetry = "0.32.0"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+ulid = "1.2.1"
+url = "2.5.7"
+prometheus = "0.14.0"
+regex = "1.11.3"
+futures = "0.3.31"
+tonic = { version = "0.14.2", features = ["tls-native-roots"] }
+base64 = "0.22.1"
+tracing-futures = "0.2.5"
+opentelemetry-http = "0.31.0"
+once_cell = "1.21"
+sysinfo = "0.37"
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/mariadb_exporter", dest = "/usr/local/bin/mariadb_exporter", mode = "0755" },
+]
+
+[package.metadata.deb]
+assets = [
+  ["target/release/mariadb_exporter", "/usr/local/bin/mariadb_exporter", "755"],
+  ["contrib/systemd/mariadb_exporter.service", "/etc/systemd/system/mariadb_exporter.service", "644"],
+  ["contrib/systemd/mariadb_exporter.env.example", "/etc/mariadb_exporter/mariadb_exporter.env", "640"],
+]
+depends = ""
+maintainer-scripts = "contrib/debian"
+
+[build-dependencies]
+built = { version = "0.8.0", features = ["git2"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+
+[dev-dependencies]
+nix = { version = "0.30", features = ["user"] }
+prometheus = "0.14"
+reqwest = { version = "0.12", features = ["json"] }
+serde_json = "1.0"
+temp-env = "0.3"
+testcontainers = "0.25"
+testcontainers-modules = { version = "0.13", features = ["mariadb"] }
+tokio = { version = "1", features = ["full", "test-util"] }

@@ -1,0 +1,25 @@
+debug
+target
+**/*.rs.bk
+.envrc
+db/data
+db/log
+.otel-collector-config.yml
+.DS_Store
+
+# Editor/IDE artifacts
+flycheck_*
+flycheck*.rs
+.flycheck_*
+
+# test artifacts
+/tests/tmp/
+*.db
+
+# Ai tools
+.claude/
+.copilot/
+.cursor/
+.idea/
+.vscode/
+.codexrc
