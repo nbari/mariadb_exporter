@@ -1,0 +1,14 @@
+[Unit]
+Description=MariaDB Prometheus Exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mariadb_exporter
+Group=mariadb_exporter
+ExecStart=/usr/bin/mariadb_exporter --dsn "mysql://root:root@127.0.0.1:3306/mysql"
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

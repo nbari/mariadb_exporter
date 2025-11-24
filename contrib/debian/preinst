@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+
+# Create user/group for running the exporter if they don't already exist.
+if ! id -u mariadb_exporter >/dev/null 2>&1; then
+    adduser --system --no-create-home --ingroup nogroup --disabled-login --disabled-password mariadb_exporter || true
+fi
