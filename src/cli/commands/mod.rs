@@ -33,7 +33,7 @@ pub fn new() -> Command {
                 .short('p')
                 .long("port")
                 .help("Port to listen on")
-                .default_value("9104")
+                .default_value("9306")
                 .env("MARIADB_EXPORTER_PORT")
                 .value_parser(clap::value_parser!(u16)),
         )
@@ -116,7 +116,7 @@ mod tests {
             let command = new();
             let matches = command.get_matches_from(vec!["mariadb_exporter"]);
 
-            assert_eq!(matches.get_one::<u16>("port").copied(), Some(9104));
+            assert_eq!(matches.get_one::<u16>("port").copied(), Some(9306));
             assert_eq!(
                 matches
                     .get_one::<String>("dsn")

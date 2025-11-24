@@ -111,11 +111,11 @@ jobs:
           MARIADB_ROOT_HOST: '%'
           MARIADB_DATABASE: mysql
         options: >-
-          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"
+          --health-cmd "mariadb-admin ping -uroot -proot --protocol=TCP --silent"
           --health-interval 5s
           --health-timeout 5s
-          --health-retries 20
-          --health-start-period 30s
+          --health-retries 30
+          --health-start-period 60s
         ports:
           - 3306:3306
     steps:
@@ -146,7 +146,7 @@ jobs:
 
       - name: Wait for MariaDB
         run: |
-          timeout 60 bash -c 'until mysqladmin ping -h 127.0.0.1 -proot --silent; do sleep 1; done'
+          timeout 120 bash -c 'until mysqladmin ping -h 127.0.0.1 -proot --silent; do sleep 1; done'
           echo "MariaDB ${{ matrix.mariadb }} is ready!"
 
       - name: Show MariaDB version

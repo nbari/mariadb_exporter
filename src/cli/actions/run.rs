@@ -47,7 +47,7 @@ mod tests {
     #[test]
     fn test_action_creation() {
         let action = Action::Run {
-            port: 9104,
+            port: 9306,
             listen: Some("127.0.0.1".to_string()),
             dsn: SecretString::new("mysql://root@localhost:3306/mysql".into()),
             collectors: vec!["default".to_string(), "exporter".to_string()],
@@ -60,7 +60,7 @@ mod tests {
                 dsn: _,
                 collectors,
             } => {
-                assert_eq!(port, 9104);
+                assert_eq!(port, 9306);
                 assert_eq!(listen, Some("127.0.0.1".to_string()));
                 assert!(collectors.contains(&"default".to_string()));
                 assert!(collectors.contains(&"exporter".to_string()));

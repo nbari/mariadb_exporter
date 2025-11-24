@@ -1,3 +1,7 @@
+# Get the current user ID and group ID
+uid := `id -u`
+gid := `id -g`
+
 default: test
   @just --list
 
@@ -261,18 +265,25 @@ watch:
 
 # get metrics curl
 curl:
-  curl -s 0:9104/metrics
+  curl -s 0:9306/metrics
 
 mariadb version="11.4":
+  mkdir -p db/data
   podman run --rm -d --name mariadb_exporter_db \
     -e MARIADB_ROOT_PASSWORD=root \
     -e MARIADB_ROOT_HOST=% \
     -e MARIADB_DATABASE=mysql \
     -p 3306:3306 \
+    -v ${PWD}/db/conf:/etc/mysql/conf.d:Z \
+    -v ${PWD}/db/data:/var/lib/mysql:Z \
     --health-cmd="mysqladmin ping -h 127.0.0.1 -proot --silent" \
     --health-interval=10s \
     --health-timeout=5s \
     --health-retries=5 \
+    --userns keep-id:uid={{ uid }},gid={{ gid }} \
+    --user {{ uid }}:{{ gid }} \
+    --userns keep-id:uid=999,gid=999 \
+    --user 999:999 \
     mariadb:{{ version }}
 
 jaeger:
@@ -305,6 +316,7 @@ test-all-mariadb:
             -e MARIADB_ROOT_PASSWORD=root \
             -e MARIADB_ROOT_HOST=% \
             -e MARIADB_DATABASE=mysql \
+            -v ${PWD}/db/conf:/etc/mysql/conf.d:Z \
             -p ${PORT}:3306 \
             mariadb:${v} >/dev/null 2>&1 || true
         idx=$((idx + 1))
@@ -368,6 +380,8 @@ test-mariadb version:
         -e MARIADB_ROOT_HOST=% \
         -e MARIADB_DATABASE=mysql \
         -p ${PORT}:3306 \
+        -v ${PWD}/db:/etc/mysql/conf.d:Z \
+        -v ${PWD}/db/data:/var/lib/mysql:Z \
         mariadb:${VERSION}
 
     echo "⏳ Waiting for MariaDB to be ready..."

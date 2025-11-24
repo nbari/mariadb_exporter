@@ -11,6 +11,9 @@ use tracing_futures::Instrument as _;
 pub mod version;
 use version::VersionCollector;
 
+pub mod status;
+use status::StatusCollector;
+
 /// `DefaultCollector` bundles lightweight always-on signals.
 #[derive(Clone, Default)]
 pub struct DefaultCollector {
@@ -21,7 +24,10 @@ impl DefaultCollector {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            subs: vec![Arc::new(VersionCollector::new())],
+            subs: vec![
+                Arc::new(VersionCollector::new()),
+                Arc::new(StatusCollector::new()),
+            ],
         }
     }
 }

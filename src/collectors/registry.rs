@@ -20,14 +20,16 @@ pub struct CollectorRegistry {
 }
 
 impl CollectorRegistry {
+    /// Creates a new `CollectorRegistry`
     #[allow(clippy::expect_used)]
     ///
     /// # Panics
     ///
-    /// Panics if core metrics fail to register.
+    /// Panics if core metrics fail to register (should never happen)
     pub fn new(config: &CollectorConfig) -> Self {
         let registry = Arc::new(Registry::new());
 
+        // Core availability gauge always registered (even if collectors fail).
         let mariadb_up_gauge = Gauge::new("mariadb_up", "Whether MariaDB is up (1) or down (0)")
             .expect("Failed to create mariadb_up gauge");
 
@@ -35,6 +37,7 @@ impl CollectorRegistry {
             .register(Box::new(mariadb_up_gauge.clone()))
             .expect("Failed to register mariadb_up gauge");
 
+        // Register mariadb_exporter_build_info gauge
         let mariadb_exporter_build_info_opts = Opts::new(
             "mariadb_exporter_build_info",
             "Build information for mariadb_exporter",
@@ -51,7 +54,7 @@ impl CollectorRegistry {
 
         mariadb_exporter_build_info
             .with_label_values(&[version, commit_sha, arch])
-            .set(1.0);
+            .set(1.0); // Gauge is always set to 1.0
 
         registry
             .register(Box::new(mariadb_exporter_build_info))
@@ -64,8 +67,10 @@ impl CollectorRegistry {
 
         let factories = all_factories();
 
+        // Extract scraper if exporter collector is enabled
         let mut scraper_opt = None;
 
+        // Build all requested collectors and register their metrics.
         let collectors = config
             .enabled_collectors
             .iter()
@@ -73,10 +78,12 @@ impl CollectorRegistry {
                 factories.get(name.as_str()).map(|f| {
                     let collector = f();
 
+                    // If this collector provides a scraper, extract it
                     if let Some(scraper) = collector.get_scraper() {
                         scraper_opt = Some(scraper);
                     }
 
+                    // Register metrics per collector under a span so failures surface in traces.
                     let reg_span = debug_span!("collector.register_metrics", collector = %name);
                     let guard = reg_span.enter();
                     if let Err(e) = collector.register_metrics(&registry) {
@@ -103,12 +110,14 @@ impl CollectorRegistry {
     ///
     /// Returns an error if metric collection or encoding fails.
     pub async fn collect_all(&self, pool: &sqlx::MySqlPool) -> anyhow::Result<String> {
+        // Increment scrape counter if scraper is available
         if let Some(ref scraper) = self.scraper {
             scraper.increment_scrapes();
         }
 
         let mut any_success = false;
 
+        // Quick connectivity check (does not guarantee every collector will succeed).
         let connect_span = info_span!(
             "db.connectivity_check",
             otel.kind = "client",
@@ -130,23 +139,31 @@ impl CollectorRegistry {
             Err(e) => {
                 error!("Failed to connect to MariaDB: {}", e);
                 self.mariadb_up_gauge.set(0.0);
+                // We still try individual collectors; some may succeed (e.g., cached metrics).
             }
         }
 
+        // Launch all collectors concurrently.
         let mut tasks = FuturesUnordered::new();
 
+        // Emit a summary log of which collectors are being launched in parallel.
         let names: Vec<&'static str> = self.collectors.iter().map(super::Collector::name).collect();
 
         info!("Launching collectors concurrently: {:?}", names);
 
         for collector in &self.collectors {
             let name = collector.name();
+
+            // Create a span per collector execution to visualize overlap in traces.
             let span = info_span!("collector.collect", collector = %name, otel.kind = "internal");
 
+            // Start timing this collector if scraper is available
             let timer = self.scraper.as_ref().map(|s| s.start_scrape(name));
 
+            // Prepare the future now (do not await here).
             let fut = collector.collect(pool);
 
+            // Push an instrumented future that logs start/finish.
             tasks.push(async move {
                 debug!("collector '{}' start", name);
 
@@ -171,6 +188,7 @@ impl CollectorRegistry {
             });
         }
 
+        // Drain completions as they finish (unordered).
         while let Some((name, res)) = tasks.next().await {
             match res {
                 Ok(()) => {
@@ -184,18 +202,22 @@ impl CollectorRegistry {
             }
         }
 
+        // If nothing worked, mark down; otherwise ensure up=1.
         if !any_success {
             self.mariadb_up_gauge.set(0.0);
         } else if (self.mariadb_up_gauge.get() - 1.0).abs() > f64::EPSILON {
             self.mariadb_up_gauge.set(1.0);
         }
 
+        // Encode current registry into Prometheus exposition format.
         let encode_span = debug_span!("prometheus.encode");
         let guard = encode_span.enter();
 
         let encoder = TextEncoder::new();
         let metric_families = self.registry.gather();
 
+        // Update metrics count for next scrape
+        // Note: This count will be visible in the NEXT scrape (eventual consistency)
         if let Some(ref scraper) = self.scraper {
             let total_metrics: i64 = metric_families
                 .iter()

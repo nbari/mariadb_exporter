@@ -7,11 +7,14 @@ use mariadb_exporter::collectors::{config::CollectorConfig, registry::CollectorR
 use nix::unistd::geteuid;
 use secrecy::SecretString;
 use sqlx::mysql::MySqlPoolOptions;
+use std::collections::HashSet;
 use std::env;
 use std::path::Path;
 use std::time::Duration;
 use testcontainers_modules::mariadb::Mariadb;
-use testcontainers_modules::testcontainers::{core::IntoContainerPort, runners::AsyncRunner};
+use testcontainers_modules::testcontainers::{
+    ImageExt, core::IntoContainerPort, runners::AsyncRunner,
+};
 
 fn socket_exists(host: &str) -> bool {
     if let Some(path) = host.strip_prefix("unix://") {
@@ -54,7 +57,12 @@ async fn collect_metrics_from_mariadb_container() -> anyhow::Result<()> {
     // Safe because we control the variable name/value and keep it ASCII for the child processes.
     unsafe { env::set_var("DOCKER_HOST", &docker_host) };
 
-    let container = match Mariadb::default().start().await {
+    let container = match Mariadb::default()
+        .with_env_var("MARIADB_ROOT_PASSWORD", "root")
+        .with_env_var("MARIADB_ROOT_HOST", "%")
+        .start()
+        .await
+    {
         Ok(container) => container,
         Err(e) => {
             eprintln!("Skipping container integration test: {e}");
@@ -63,16 +71,10 @@ async fn collect_metrics_from_mariadb_container() -> anyhow::Result<()> {
     };
 
     let port = container.get_host_port_ipv4(3306.tcp()).await?;
-    let host = container.get_host().await?;
+    let host = container.get_host().await?.to_string();
+    let pool = connect_with_candidates(&host, port, "test").await?;
+
     let dsn = format!("mysql://root@{host}:{port}/test");
-
-    let pool = MySqlPoolOptions::new()
-        .min_connections(1)
-        .max_connections(3)
-        .acquire_timeout(Duration::from_secs(20))
-        .connect(&dsn)
-        .await?;
-
     set_base_connect_options_from_dsn(&SecretString::from(dsn.clone()))?;
 
     let config =
@@ -91,4 +93,48 @@ async fn collect_metrics_from_mariadb_container() -> anyhow::Result<()> {
     );
 
     Ok(())
+}
+
+async fn connect_with_candidates(
+    host: &str,
+    port: u16,
+    db: &str,
+) -> anyhow::Result<sqlx::MySqlPool> {
+    let mut tried = Vec::new();
+    let mut candidates = HashSet::new();
+
+    if let Ok(pass) = env::var("MARIADB_ROOT_PASSWORD") {
+        candidates.insert(pass);
+    }
+    if let Ok(pass) = env::var("MARIADB_PASSWORD") {
+        candidates.insert(pass);
+    }
+    candidates.insert("root".to_string());
+    candidates.insert("test".to_string());
+    candidates.insert(String::new());
+
+    let mut last_err = None;
+    for pass in candidates {
+        let dsn = if pass.is_empty() {
+            format!("mysql://root@{host}:{port}/{db}")
+        } else {
+            format!("mysql://root:{pass}@{host}:{port}/{db}")
+        };
+        tried.push(dsn.clone());
+
+        match MySqlPoolOptions::new()
+            .min_connections(1)
+            .max_connections(3)
+            .acquire_timeout(Duration::from_secs(20))
+            .connect(&dsn)
+            .await
+        {
+            Ok(pool) => return Ok(pool),
+            Err(e) => last_err = Some(e),
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "Failed to connect using candidates: {tried:?}, last error: {last_err:?}"
+    ))
 }
