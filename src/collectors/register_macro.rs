@@ -130,6 +130,7 @@ mod tests {
 
         // Should have all registered collectors
         assert!(!factories.is_empty());
+        assert!(factories.len() >= 2); // At least default and exporter
     }
 
     #[test]
@@ -137,6 +138,9 @@ mod tests {
         let names = crate::collectors::COLLECTOR_NAMES;
 
         assert!(!names.is_empty());
+        assert!(names.len() >= 2);
+
+        // Check expected collectors are present
         assert!(names.contains(&"default"));
         assert!(names.contains(&"exporter"));
     }
@@ -164,22 +168,38 @@ mod tests {
 
         // Every factory key should be in COLLECTOR_NAMES
         for key in factories.keys() {
-            assert!(names.contains(key));
+            assert!(
+                names.contains(key),
+                "Factory key '{key}' not found in COLLECTOR_NAMES"
+            );
         }
 
         // Every name in COLLECTOR_NAMES should have a factory
         for name in names {
-            assert!(factories.contains_key(name));
+            assert!(
+                factories.contains_key(name),
+                "Name '{name}' in COLLECTOR_NAMES has no factory"
+            );
         }
+
+        // Counts should match
+        assert_eq!(factories.len(), names.len());
     }
 
     #[test]
     fn test_collector_name_matches_key() {
         let factories = crate::collectors::all_factories();
 
+        // The collector's name() should match the factory key
         for (key, factory) in &factories {
             let collector = factory();
-            assert_eq!(collector.name(), *key);
+            assert_eq!(
+                collector.name(),
+                *key,
+                "Collector name '{}' doesn't match factory key '{}'",
+                collector.name(),
+                key
+            );
         }
     }
 
@@ -189,7 +209,10 @@ mod tests {
 
         if let Some(factory) = factories.get("default") {
             let collector = factory();
-            assert!(collector.enabled_by_default());
+            assert!(
+                collector.enabled_by_default(),
+                "Default collector should be enabled by default"
+            );
         }
     }
 
@@ -198,12 +221,127 @@ mod tests {
         let factories = crate::collectors::all_factories();
         let registry = Registry::new();
 
+        // Test that each collector can register metrics without panicking
         for (name, factory) in &factories {
             let collector = factory();
             let result = collector.register_metrics(&registry);
             assert!(
                 result.is_ok(),
-                "Collector '{name}' failed to register metrics"
+                "Collector '{name}' failed to register metrics: {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_collector_names_are_lowercase() {
+        let names = crate::collectors::COLLECTOR_NAMES;
+
+        // Convention: collector names should be lowercase
+        for name in names {
+            assert_eq!(
+                *name,
+                name.to_lowercase(),
+                "Collector name '{name}' is not lowercase"
+            );
+        }
+    }
+
+    #[test]
+    fn test_collector_names_are_unique() {
+        let names = crate::collectors::COLLECTOR_NAMES;
+        let mut seen = std::collections::HashSet::new();
+
+        for name in names {
+            assert!(
+                seen.insert(name),
+                "Duplicate collector name found: '{name}'"
+            );
+        }
+    }
+
+    #[test]
+    fn test_factory_map_keys_are_unique() {
+        let factories = crate::collectors::all_factories();
+
+        // HashMap keys are inherently unique, but let's verify count
+        let unique_count = factories
+            .keys()
+            .collect::<std::collections::HashSet<_>>()
+            .len();
+
+        assert_eq!(
+            factories.len(),
+            unique_count,
+            "Factory map has duplicate keys"
+        );
+    }
+
+    #[test]
+    fn test_exporter_collector_is_registered() {
+        let names = crate::collectors::COLLECTOR_NAMES;
+        assert!(
+            names.contains(&"exporter"),
+            "Exporter collector should be registered"
+        );
+    }
+
+    #[test]
+    fn test_exporter_collector_factory_exists() {
+        let factories = crate::collectors::all_factories();
+        assert!(
+            factories.contains_key("exporter"),
+            "Exporter factory should exist"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::panic)]
+    fn test_get_scraper_returns_some_for_exporter() {
+        let factories = crate::collectors::all_factories();
+
+        if let Some(factory) = factories.get("exporter") {
+            let collector = factory();
+            let scraper = collector.get_scraper();
+
+            assert!(
+                scraper.is_some(),
+                "ExporterCollector should provide a scraper"
+            );
+        } else {
+            panic!("Exporter factory not found");
+        }
+    }
+
+    #[test]
+    fn test_get_scraper_returns_none_for_other_collectors() {
+        let factories = crate::collectors::all_factories();
+
+        // Test that non-exporter collectors return None
+        let non_exporter_collectors = vec!["default", "tls", "audit", "statements"];
+
+        for name in non_exporter_collectors {
+            if let Some(factory) = factories.get(name) {
+                let collector = factory();
+                let scraper = collector.get_scraper();
+
+                assert!(
+                    scraper.is_none(),
+                    "Collector '{name}' should not provide a scraper"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_exporter_collector_name_matches() {
+        let factories = crate::collectors::all_factories();
+
+        if let Some(factory) = factories.get("exporter") {
+            let collector = factory();
+            assert_eq!(
+                collector.name(),
+                "exporter",
+                "ExporterCollector name should be 'exporter'"
             );
         }
     }

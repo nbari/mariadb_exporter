@@ -21,15 +21,15 @@ pub struct CollectorRegistry {
 
 impl CollectorRegistry {
     /// Creates a new `CollectorRegistry`
-    #[allow(clippy::expect_used)]
     ///
     /// # Panics
     ///
     /// Panics if core metrics fail to register (should never happen)
+    #[allow(clippy::expect_used)]
     pub fn new(config: &CollectorConfig) -> Self {
         let registry = Arc::new(Registry::new());
 
-        // Core availability gauge always registered (even if collectors fail).
+        // Register mariadb_up gauge
         let mariadb_up_gauge = Gauge::new("mariadb_up", "Whether MariaDB is up (1) or down (0)")
             .expect("Failed to create mariadb_up gauge");
 
@@ -48,6 +48,7 @@ impl CollectorRegistry {
         )
         .expect("Failed to create mariadb_exporter_build_info GaugeVec");
 
+        // Add build information as labels
         let version = env!("CARGO_PKG_VERSION");
         let commit_sha = GIT_COMMIT_HASH.unwrap_or("unknown");
         let arch = env::consts::ARCH;
@@ -104,11 +105,12 @@ impl CollectorRegistry {
         }
     }
 
-    #[instrument(skip(self, pool), level = "info", err, fields(otel.kind = "internal"))]
+    /// Collect from all enabled collectors.
     ///
     /// # Errors
     ///
-    /// Returns an error if metric collection or encoding fails.
+    /// Returns an error if metric collection or encoding fails
+    #[instrument(skip(self, pool), level = "info", err, fields(otel.kind = "internal"))]
     pub async fn collect_all(&self, pool: &sqlx::MySqlPool) -> anyhow::Result<String> {
         // Increment scrape counter if scraper is available
         if let Some(ref scraper) = self.scraper {
@@ -237,5 +239,15 @@ impl CollectorRegistry {
     #[must_use]
     pub const fn registry(&self) -> &Arc<Registry> {
         &self.registry
+    }
+
+    #[must_use]
+    pub fn collector_names(&self) -> Vec<&'static str> {
+        self.collectors.iter().map(super::Collector::name).collect()
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.collectors.is_empty()
     }
 }

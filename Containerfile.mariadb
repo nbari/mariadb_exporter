@@ -1,0 +1,43 @@
+# Containerfile for mariadb_exporter integrated with MariaDB
+# This creates a single container with both MariaDB and the exporter
+# for realistic socket-based monitoring testing
+
+FROM mariadb:11.4
+
+# Install build dependencies and runtime tools
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust (for building the exporter)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Copy exporter source
+WORKDIR /build
+COPY Cargo.toml Cargo.lock build.rs ./
+COPY src ./src
+
+# Build the exporter
+RUN cargo build --release && \
+    mv target/release/mariadb_exporter /usr/local/bin/ && \
+    chmod +x /usr/local/bin/mariadb_exporter && \
+    rm -rf /build /root/.cargo/registry /root/.cargo/git
+
+# Copy initialization scripts
+COPY scripts/setup-exporter-user.sql /docker-entrypoint-initdb.d/01-setup-exporter-user.sql
+COPY scripts/start-exporter.sh /usr/local/bin/start-exporter.sh
+RUN chmod +x /usr/local/bin/start-exporter.sh
+
+# Copy custom entrypoint that starts both MariaDB and exporter
+COPY scripts/entrypoint-combined.sh /usr/local/bin/entrypoint-combined.sh
+RUN chmod +x /usr/local/bin/entrypoint-combined.sh
+
+# Expose MariaDB and exporter ports
+EXPOSE 3306 9306
+
+# Use combined entrypoint
+ENTRYPOINT ["/usr/local/bin/entrypoint-combined.sh"]
+CMD ["mariadbd"]

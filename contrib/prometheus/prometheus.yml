@@ -1,0 +1,29 @@
+# Prometheus configuration for mariadb_exporter testing
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'mariadb-exporter-test'
+
+scrape_configs:
+  # MariaDB exporter (TCP connection)
+  - job_name: 'mariadb_tcp'
+    static_configs:
+      - targets: ['exporter_tcp:9306']
+        labels:
+          instance: 'mariadb_test_tcp'
+          connection: 'tcp'
+
+  # MariaDB exporter (Socket connection)
+  - job_name: 'mariadb_socket'
+    static_configs:
+      - targets: ['exporter_socket:9307']
+        labels:
+          instance: 'mariadb_test_socket'
+          connection: 'socket'
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

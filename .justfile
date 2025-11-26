@@ -401,3 +401,77 @@ validate-dashboard:
 # Run all validations (tests + dashboard)
 validate-all: test validate-dashboard
   @echo "✅ All validations passed!"
+
+# Build container image (standalone exporter)
+build-image:
+  podman build -t mariadb_exporter:latest -f Containerfile .
+
+# Build combined MariaDB + exporter image (realistic socket testing)
+build-image-combined:
+  podman build -t mariadb_exporter:combined -f Containerfile.mariadb .
+
+# Test socket connection (combined container - most realistic)
+test-socket:
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  echo "🔧 Building combined MariaDB + exporter image..."
+  just build-image-combined
+
+  echo ""
+  echo "🚀 Starting combined container..."
+  podman run --rm -d --name mariadb_socket_test \
+    -e MARIADB_ROOT_PASSWORD=root \
+    -e MARIADB_DATABASE=mysql \
+    -p 3307:3306 \
+    -p 9308:9306 \
+    mariadb_exporter:combined
+
+  echo "⏳ Waiting for services to be ready..."
+  sleep 10
+
+  # Wait for MariaDB
+  timeout 30 bash -c '
+    until podman exec mariadb_socket_test mysqladmin ping -h localhost --silent 2>/dev/null; do
+      sleep 1
+    done
+  ' || {
+    echo "❌ MariaDB failed to start"
+    podman logs mariadb_socket_test
+    podman stop mariadb_socket_test || true
+    exit 1
+  }
+
+  # Wait for exporter
+  timeout 30 bash -c '
+    until podman exec mariadb_socket_test wget -qO- http://localhost:9306/health 2>/dev/null | grep -q "ok"; do
+      sleep 1
+    done
+  ' || {
+    echo "❌ Exporter failed to start"
+    podman logs mariadb_socket_test | tail -50
+    podman stop mariadb_socket_test || true
+    exit 1
+  }
+
+  echo "✅ Both services are ready!"
+  echo ""
+
+  # Test metrics
+  echo "🧪 Testing metrics via socket connection..."
+  if podman exec mariadb_socket_test wget -qO- http://localhost:9306/metrics | grep -q "mariadb_up 1"; then
+    echo "✅ Socket connection successful!"
+    echo ""
+    echo "📊 Sample metrics:"
+    podman exec mariadb_socket_test wget -qO- http://localhost:9306/metrics | grep -E "^mariadb_(up|version|exporter)" | head -8
+  else
+    echo "❌ Socket connection failed!"
+    podman logs mariadb_socket_test | tail -50
+    podman stop mariadb_socket_test || true
+    exit 1
+  fi
+
+  echo ""
+  echo "🧹 Cleaning up..."
+  podman stop mariadb_socket_test || true
+  echo "✅ Test complete!"
