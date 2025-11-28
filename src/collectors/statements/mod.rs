@@ -46,20 +46,20 @@ impl StatementsCollector {
                 "Total statements counted in performance_schema digests",
             ),
             digest_errors: g(
-                "mariadb_perf_schema_digest_errors",
+                "mariadb_perf_schema_digest_errors_total",
                 "Total errors across statement digests",
             ),
             digest_warnings: g(
-                "mariadb_perf_schema_digest_warnings",
+                "mariadb_perf_schema_digest_warnings_total",
                 "Total warnings across statement digests",
             ),
             digest_rows_examined: g(
-                "mariadb_perf_schema_digest_rows_examined",
-                "Rows examined across statement digests",
+                "mariadb_perf_schema_digest_rows_examined_total",
+                "Total rows examined across statement digests",
             ),
             digest_rows_sent: g(
-                "mariadb_perf_schema_digest_rows_sent",
-                "Rows sent across statement digests",
+                "mariadb_perf_schema_digest_rows_sent_total",
+                "Total rows sent across statement digests",
             ),
             digest_latency_seconds: g(
                 "mariadb_perf_schema_digest_latency_seconds_total",

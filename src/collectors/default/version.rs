@@ -1,9 +1,10 @@
 use crate::collectors::Collector;
 use anyhow::{Result, anyhow};
 use futures::future::BoxFuture;
-use prometheus::{IntGaugeVec, Opts, Registry};
+use prometheus::{IntGauge, IntGaugeVec, Opts, Registry};
 use regex::Regex;
 use sqlx::MySqlPool;
+use sysinfo::System;
 use tracing::{debug, info_span, instrument};
 use tracing_futures::Instrument as _;
 
@@ -12,6 +13,7 @@ use tracing_futures::Instrument as _;
 pub struct VersionCollector {
     mariadb_version_info: IntGaugeVec,
     mariadb_version_num: IntGaugeVec,
+    system_memory_total_bytes: IntGauge,
     version_regex: Regex,
 }
 
@@ -47,12 +49,24 @@ impl VersionCollector {
         )
         .expect("valid mariadb_version_num metric opts");
 
+        let system_memory_total_bytes = IntGauge::with_opts(Opts::new(
+            "mariadb_exporter_system_memory_total_bytes",
+            "Total system memory in bytes",
+        ))
+        .expect("mariadb_exporter_system_memory_total_bytes");
+
         let version_regex =
             Regex::new(r"((\d+)(\.\d+)?(\.\d+)?)").expect("valid version regex");
+
+        // Initialize system memory (static value)
+        let system = System::new_all();
+        let total_memory = system.total_memory();
+        system_memory_total_bytes.set(i64::try_from(total_memory).unwrap_or(0));
 
         Self {
             mariadb_version_info,
             mariadb_version_num,
+            system_memory_total_bytes,
             version_regex,
         }
     }
@@ -128,6 +142,7 @@ impl Collector for VersionCollector {
     fn register_metrics(&self, registry: &Registry) -> Result<()> {
         registry.register(Box::new(self.mariadb_version_info.clone()))?;
         registry.register(Box::new(self.mariadb_version_num.clone()))?;
+        registry.register(Box::new(self.system_memory_total_bytes.clone()))?;
         Ok(())
     }
 

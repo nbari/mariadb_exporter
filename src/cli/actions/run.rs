@@ -62,8 +62,26 @@ mod tests {
             } => {
                 assert_eq!(port, 9306);
                 assert_eq!(listen, Some("127.0.0.1".to_string()));
+                assert_eq!(collectors.len(), 2);
                 assert!(collectors.contains(&"default".to_string()));
                 assert!(collectors.contains(&"exporter".to_string()));
+            }
+        }
+    }
+
+    #[test]
+    fn test_action_with_empty_collectors() {
+        // Test that Action can be created with empty collectors list
+        let action = Action::Run {
+            port: 8080,
+            listen: None,
+            dsn: SecretString::new("mysql://localhost:3306/mysql".into()),
+            collectors: vec![],
+        };
+
+        match action {
+            Action::Run { collectors, .. } => {
+                assert_eq!(collectors.len(), 0, "Should allow empty collectors list");
             }
         }
     }

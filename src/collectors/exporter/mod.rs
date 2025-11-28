@@ -117,4 +117,78 @@ mod tests {
         let collector = ExporterCollector::new();
         assert_eq!(collector.name(), "exporter");
     }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_exporter_collector_not_enabled_by_default() {
+        let collector = ExporterCollector::new();
+        assert!(!collector.enabled_by_default());
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_exporter_collector_registers_without_error() {
+        let collector = ExporterCollector::new();
+        let registry = Registry::new();
+        assert!(collector.register_metrics(&registry).is_ok());
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_exporter_collector_has_scraper() {
+        let collector = ExporterCollector::new();
+        let scraper = collector.get_scraper();
+
+        // Scraper should be accessible
+        assert!(Arc::strong_count(scraper) >= 1);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_exporter_collector_scraper_is_same_instance() {
+        let collector = ExporterCollector::new();
+
+        // Get scraper twice and verify it's the same Arc
+        let scraper1 = collector.get_scraper();
+        let scraper2 = collector.get_scraper();
+
+        assert!(Arc::ptr_eq(scraper1, scraper2));
+    }
+
+    #[tokio::test]
+    #[allow(clippy::unwrap_used)]
+    async fn test_exporter_collector_collect_succeeds() {
+        use sqlx::mysql::MySqlPoolOptions;
+
+        // This test requires a database connection
+        let dsn = std::env::var("MARIADB_EXPORTER_DSN").unwrap_or_else(|_| {
+            "mysql://root:root@localhost:3306/mysql".to_string()
+        });
+
+        let Ok(pool) = MySqlPoolOptions::new()
+            .min_connections(1)
+            .max_connections(1)
+            .connect(&dsn)
+            .await
+        else {
+            eprintln!("Skipping test: database not available");
+            return;
+        };
+
+        let collector = ExporterCollector::new();
+        let registry = Registry::new();
+
+        // Register metrics first
+        collector.register_metrics(&registry).unwrap();
+
+        // Collect should succeed (it's a no-op but shouldn't error)
+        let result = collector.collect(&pool).await;
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_exporter_collector_default_trait() {
+        let collector = ExporterCollector::default();
+        assert_eq!(collector.name(), "exporter");
+    }
 }

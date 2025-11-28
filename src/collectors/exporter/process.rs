@@ -199,3 +199,79 @@ impl Collector for ProcessCollector {
         false
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_process_collector_new() {
+        let collector = ProcessCollector::new();
+        assert!(collector.start_time_seconds.get() > 0.0);
+    }
+
+    #[test]
+    fn test_process_collector_registers_without_error() {
+        let collector = ProcessCollector::new();
+        let registry = Registry::new();
+        assert!(collector.register_metrics(&registry).is_ok());
+    }
+
+    #[test]
+    fn test_process_collector_collects_stats() {
+        let collector = ProcessCollector::new();
+        collector.collect_stats();
+
+        assert!(collector.resident_memory_bytes.get() > 0);
+        assert!(collector.virtual_memory_bytes.get() > 0);
+        assert!(collector.virtual_memory_bytes.get() >= collector.resident_memory_bytes.get());
+        assert!(collector.cpu_percent.get() >= 0.0);
+    }
+
+    #[test]
+    fn test_cpu_percent_reasonable() {
+        let collector = ProcessCollector::new();
+        collector.collect_stats();
+
+        let cpu = collector.cpu_percent.get();
+        assert!(cpu >= 0.0);
+        assert!(cpu < 10000.0);
+    }
+
+    #[test]
+    fn test_memory_metrics_reasonable() {
+        let collector = ProcessCollector::new();
+        collector.collect_stats();
+
+        let rss_mb = collector.resident_memory_bytes.get() / 1024 / 1024;
+        let vsz_mb = collector.virtual_memory_bytes.get() / 1024 / 1024;
+
+        assert!(rss_mb > 1);
+        assert!(rss_mb < 10_000);
+        assert!(vsz_mb > rss_mb);
+        assert!(vsz_mb < 100_000);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_file_descriptors_linux() {
+        let collector = ProcessCollector::new();
+        collector.collect_stats();
+
+        let fd_count = collector.open_fds.get();
+        assert!(fd_count >= 3);
+        assert!(fd_count > 0);
+    }
+
+    #[test]
+    fn test_multiple_collections_stable() {
+        let collector = ProcessCollector::new();
+
+        for _ in 0..5 {
+            collector.collect_stats();
+        }
+
+        assert!(collector.resident_memory_bytes.get() > 0);
+        assert!(collector.cpu_percent.get() >= 0.0);
+    }
+}

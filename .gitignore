@@ -22,5 +22,6 @@ flycheck*.rs
 .cursor/
 .idea/
 .vscode/
+.opencode/
 .codexrc
 CLAUDE.md
