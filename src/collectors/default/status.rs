@@ -4,7 +4,7 @@ use futures::future::BoxFuture;
 use prometheus::{IntCounter, IntGauge, Registry};
 use sqlx::{MySqlPool, Row};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use tracing::{debug, info_span, instrument};
 use tracing_futures::Instrument as _;
@@ -131,6 +131,8 @@ pub struct StatusCollector {
     have_ssl: IntGauge,
     have_openssl: IntGauge,
     performance_schema: IntGauge,
+    max_connections: IntGauge,
+    config_vars_initialized: Arc<AtomicBool>,
 }
 
 impl StatusCollector {
@@ -558,6 +560,11 @@ impl StatusCollector {
                 "mariadb_global_variables_performance_schema",
                 "Performance schema enabled (1/0)",
             ),
+            max_connections: g(
+                "mariadb_global_variables_max_connections",
+                "Maximum number of simultaneous client connections allowed",
+            ),
+            config_vars_initialized: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -675,6 +682,7 @@ impl StatusCollector {
             &self.have_ssl,
             &self.have_openssl,
             &self.performance_schema,
+            &self.max_connections,
         ];
 
         for m in metrics {
@@ -984,6 +992,12 @@ impl StatusCollector {
     }
 
     fn collect_variables(&self, vars: &HashMap<String, String>) {
+        // All these variables are configuration values that don't change at runtime
+        // Query them only once on first scrape to avoid issues when connections are maxed out
+        if self.config_vars_initialized.load(Ordering::Relaxed) {
+            return;
+        }
+
         let to_flag = |val: Option<&String>| match val.map(|s| s.to_ascii_lowercase()) {
             Some(v) if v == "yes" || v == "on" || v == "true" || v == "1" => 1,
             _ => 0,
@@ -1000,10 +1014,25 @@ impl StatusCollector {
         if let Some(raw) = vars.get(&"innodb_buffer_pool_size".to_string()) {
             if let Ok(v) = raw.parse::<i64>() {
                 self.innodb_buffer_pool_size_bytes.set(v);
+                debug!(metric = "innodb_buffer_pool_size", value = v, "initialized config variable");
             } else {
                 debug!(metric = "innodb_buffer_pool_size", value = raw, "could not parse variable value");
             }
         }
+
+        // Set max_connections from global variable
+        if let Some(raw) = vars.get(&"max_connections".to_string()) {
+            if let Ok(v) = raw.parse::<i64>() {
+                self.max_connections.set(v);
+                debug!(metric = "max_connections", value = v, "initialized config variable");
+            } else {
+                debug!(metric = "max_connections", value = raw, "could not parse variable value");
+            }
+        }
+
+        // Mark all config variables as initialized (never query again)
+        self.config_vars_initialized.store(true, Ordering::Relaxed);
+        debug!("all config variables initialized (will not update again)");
     }
 }
 
@@ -1057,11 +1086,11 @@ impl Collector for StatusCollector {
                 "db.query",
                 db.system = "mysql",
                 db.operation = "SELECT",
-                db.statement = "SELECT VARIABLE_NAME, VARIABLE_VALUE FROM information_schema.global_variables WHERE VARIABLE_NAME IN ('have_ssl','have_openssl','performance_schema','innodb_buffer_pool_size')",
+                db.statement = "SELECT VARIABLE_NAME, VARIABLE_VALUE FROM information_schema.global_variables WHERE VARIABLE_NAME IN ('have_ssl','have_openssl','performance_schema','innodb_buffer_pool_size','max_connections')",
                 otel.kind = "client"
             );
             let vars_rows = sqlx::query(
-                "SELECT VARIABLE_NAME, VARIABLE_VALUE FROM information_schema.global_variables WHERE VARIABLE_NAME IN ('have_ssl','have_openssl','performance_schema','innodb_buffer_pool_size')",
+                "SELECT VARIABLE_NAME, VARIABLE_VALUE FROM information_schema.global_variables WHERE VARIABLE_NAME IN ('have_ssl','have_openssl','performance_schema','innodb_buffer_pool_size','max_connections')",
             )
             .fetch_all(pool)
             .instrument(vars_span)

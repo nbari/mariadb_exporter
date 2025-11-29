@@ -404,7 +404,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "**Goal**: Monitor connection rate\n**Action**: High rate may indicate connection pooling issues",
+      "description": "**Goal**: Monitor connection capacity usage\n**Action**: If connections approach max_connections, increase the limit or investigate connection leaks",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -413,11 +413,11 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "Connections",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "tooltip": false,
@@ -430,11 +430,11 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "never",
+            "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
-              "mode": "none",
-              "group": "A"
+              "group": "A",
+              "mode": "none"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -450,12 +450,38 @@
               }
             ]
           },
-          "unit": "cps"
+          "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max Connections (configured limit)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 12,
         "w": 8,
         "x": 0,
         "y": 18
@@ -463,13 +489,17 @@
       "id": 10,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -479,11 +509,30 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_connections{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "A",
+          "legendFormat": "Active Connections"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_global_status_max_used_connections{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "B",
+          "legendFormat": "Max Used Connections"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_global_variables_max_connections{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "C",
+          "legendFormat": "Max Connections (configured limit)"
         }
       ],
-      "title": "Connections",
+      "title": "Connection Usage",
       "type": "timeseries"
     },
     {
@@ -491,7 +540,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "**Goal**: Track active connections\n**Action**: Compare with max_connections to avoid saturation",
+      "description": "**Goal**: Monitor thread usage and connection capacity\n**Action**: High thread creation rate may indicate connection churn",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -539,19 +588,53 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max Connections (limit)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 12,
         "w": 8,
         "x": 8,
-        "y": 26
+        "y": 18
       },
       "id": 11,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -567,7 +650,26 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "Threads Connected"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_global_status_threads_created{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "B",
+          "legendFormat": "Threads Created (cumulative)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_global_variables_max_connections{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "C",
+          "legendFormat": "Max Connections (limit)"
         }
       ],
       "title": "Threads",
@@ -578,7 +680,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "**Goal**: Monitor actively executing queries\n**Action**: Spikes indicate query backlog or slow queries",
+      "description": "**Goal**: Monitor active query execution threads\n**Action**: High running threads may indicate slow queries or high load",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -626,19 +728,53 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Threads Connected (reference)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "semi-dark-orange"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 12,
         "w": 8,
         "x": 16,
-        "y": 34
+        "y": 18
       },
       "id": 12,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -654,7 +790,17 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "mariadb_global_status_threads_running{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "Threads Running"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "B",
+          "legendFormat": "Threads Connected (reference)"
         }
       ],
       "title": "Running Threads",
@@ -665,7 +811,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "**Goal**: Detect connection problems\n**Action**: Investigate network issues, authentication failures, or client crashes",
+      "description": "**Goal**: Monitor connection abort patterns\\n**Action**: High aborted connects = connection issues; High aborted clients = client disconnects",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -716,16 +862,20 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 12,
         "w": 12,
         "x": 0,
-        "y": 42
+        "y": 30
       },
       "id": 13,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -738,10 +888,24 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
-          "expr": "rate(mariadb_global_status_aborted_connects{job=\"$job\", instance=~\"$instance\"}[5m]) + rate(mariadb_global_status_aborted_clients{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "editorMode": "code",
+          "expr": "mariadb_global_status_aborted_connects{job=\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "Aborted Connects",
+          "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "mariadb_global_status_aborted_clients{job=\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "Aborted Clients",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "Aborted Connections",
@@ -752,7 +916,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "**Goal**: Monitor connection rejections\n**Action**: Increase max_connections or investigate server overload",
+      "description": "**Goal**: Monitor connection error types\\n**Action**: Max connections errors indicate capacity issues; Check max_connections setting",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -803,16 +967,20 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 12,
         "w": 12,
         "x": 12,
-        "y": 50
+        "y": 30
       },
       "id": 14,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -825,10 +993,35 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
-          "expr": "rate(mariadb_global_status_connection_errors_max_connections{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_connection_errors_too_many_connections{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_connection_errors_refused{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "editorMode": "code",
+          "expr": "mariadb_global_status_connection_errors_max_connections{job=\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "Max Connections Reached",
+          "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "mariadb_global_status_connection_errors_too_many_connections{job=\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "Too Many Connections",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "mariadb_global_status_connection_errors_refused{job=\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "Connection Refused",
+          "range": true,
+          "refId": "C"
         }
       ],
       "title": "Connection Errors",
