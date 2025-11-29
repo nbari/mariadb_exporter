@@ -509,9 +509,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max(max_over_time(mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}[$__range]) or mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"})",
+          "expr": "mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
           "refId": "A",
-          "legendFormat": "Active Connections (max)"
+          "legendFormat": "Active Connections"
         },
         {
           "datasource": {
@@ -520,7 +520,7 @@
           },
           "expr": "mariadb_global_status_max_used_connections{job=\"$job\", instance=~\"$instance\"}",
           "refId": "B",
-          "legendFormat": "Max Used Connections"
+          "legendFormat": "Max Used Connections (since startup)"
         },
         {
           "datasource": {
