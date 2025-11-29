@@ -11,15 +11,51 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_ROOT_HOST: '%'
+          MARIADB_DATABASE: mysql
+        options: >-
+          --health-cmd "mariadb-admin ping -uroot -proot --protocol=TCP --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+          --health-start-period 60s
+        ports:
+          - 3306:3306
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
 
-      - name: Run tests
-        run: cargo test --verbose -- --nocapture
+      - name: Install MariaDB client
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y mariadb-client
+
+      - name: Wait for MariaDB
+        run: |
+          timeout 120 bash -c 'until mysqladmin ping -h 127.0.0.1 -proot --silent; do sleep 1; done'
+          echo "MariaDB is ready!"
+
+      - name: Show MariaDB version
+        run: mysql -h 127.0.0.1 -uroot -proot -e "SELECT VERSION();"
+
+      - name: Run tests with coverage instrumentation
+        run: |
+          # Runs all tests with coverage tracking:
+          # - Unit tests (143+)
+          # - Collector integration tests (28)
+          # - Exporter HTTP server tests (8)
+          # - Dashboard validation tests (3)
+          # - Smoke tests (2)
+          cargo test --verbose -- --nocapture
         env:
+          MARIADB_EXPORTER_DSN: mysql://root:root@127.0.0.1:3306/mysql
           RUST_BACKTRACE: full
           CARGO_INCREMENTAL: 0
           LLVM_PROFILE_FILE: coverage-%p-%m.profraw
