@@ -88,9 +88,11 @@ maintainer-scripts = "contrib/debian"
 built = { version = "0.8.0", features = ["git2"] }
 
 [profile.release]
+opt-level = 3
 lto = "fat"
 codegen-units = 1
-strip = "symbols"
+strip = true
+panic = "abort"
 
 [dev-dependencies]
 nix = { version = "0.30", features = ["user"] }
