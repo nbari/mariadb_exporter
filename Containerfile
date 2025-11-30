@@ -8,23 +8,34 @@ RUN apk add --no-cache musl-dev
 
 WORKDIR /build
 
-# Copy manifests
-COPY Cargo.toml Cargo.lock build.rs ./
-
-# Copy source code
-COPY src ./src
-
-# Determine the Rust target based on platform
+# Determine the Rust target based on platform early
 RUN RUST_TARGET=""; \
     case "$TARGETPLATFORM" in \
         linux/amd64) RUST_TARGET=x86_64-unknown-linux-musl ;; \
         linux/arm64) RUST_TARGET=aarch64-unknown-linux-musl ;; \
         *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
     esac && \
+    echo "RUST_TARGET=$RUST_TARGET" > /tmp/rust_target.env && \
     echo "Building for target: $RUST_TARGET" && \
     if [ "$RUST_TARGET" != "x86_64-unknown-linux-musl" ]; then \
         rustup target add "$RUST_TARGET"; \
-    fi && \
+    fi
+
+# Copy manifests only (for dependency caching)
+COPY Cargo.toml Cargo.lock build.rs ./
+
+# Create dummy main.rs to build dependencies only
+RUN mkdir -p src/bin && \
+    echo 'fn main() {}' > src/bin/mariadb_exporter.rs && \
+    . /tmp/rust_target.env && \
+    cargo build --release --target "$RUST_TARGET" && \
+    rm -rf src
+
+# Copy actual source code
+COPY src ./src
+
+# Build the actual application (dependencies are cached)
+RUN . /tmp/rust_target.env && \
     cargo build --release --target "$RUST_TARGET" && \
     mkdir -p /build/output && \
     cp "/build/target/$RUST_TARGET/release/mariadb_exporter" /build/output/

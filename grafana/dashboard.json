@@ -693,7 +693,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
+          "expr": "max_over_time(mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}[$interval]) or mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
           "refId": "A",
           "legendFormat": "Active Connections"
         },
@@ -833,7 +833,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
+          "expr": "max_over_time(mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}[$interval]) or mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
           "refId": "A",
           "legendFormat": "Threads Connected"
         },
@@ -973,7 +973,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_global_status_threads_running{job=\"$job\", instance=~\"$instance\"}",
+          "expr": "max_over_time(mariadb_global_status_threads_running{job=\"$job\", instance=~\"$instance\"}[$interval]) or mariadb_global_status_threads_running{job=\"$job\", instance=~\"$instance\"}",
           "refId": "A",
           "legendFormat": "Threads Running"
         },
@@ -982,7 +982,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
+          "expr": "max_over_time(mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}[$interval]) or mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
           "refId": "B",
           "legendFormat": "Threads Connected (reference)"
         }
@@ -2556,7 +2556,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_innodb_buffer_pool_pages_data{job=\"$job\", instance=~\"$instance\"} or mariadb_innodb_buffer_pool_pages_dirty{job=\"$job\", instance=~\"$instance\"} or mariadb_innodb_buffer_pool_pages_free{job=\"$job\", instance=~\"$instance\"}",
+          "expr": "max_over_time(mariadb_innodb_buffer_pool_pages_data{job=\"$job\", instance=~\"$instance\"}[$interval]) or mariadb_innodb_buffer_pool_pages_data{job=\"$job\", instance=~\"$instance\"} or max_over_time(mariadb_innodb_buffer_pool_pages_dirty{job=\"$job\", instance=~\"$instance\"}[$interval]) or mariadb_innodb_buffer_pool_pages_dirty{job=\"$job\", instance=~\"$instance\"} or mariadb_innodb_buffer_pool_pages_free{job=\"$job\", instance=~\"$instance\"}",
           "refId": "A",
           "legendFormat": "Data/Dirty/Free Pages"
         }
@@ -3686,7 +3686,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_innodb_history_list_length{job=\"$job\", instance=~\"$instance\"}",
+          "expr": "max_over_time(mariadb_innodb_history_list_length{job=\"$job\", instance=~\"$instance\"}[$interval]) or mariadb_innodb_history_list_length{job=\"$job\", instance=~\"$instance\"}",
           "refId": "A",
           "legendFormat": "History List Length (uncommitted transactions)"
         }
@@ -3975,7 +3975,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_innodb_os_log_pending_writes{job=\"$job\", instance=~\"$instance\"} or mariadb_innodb_os_log_pending_fsyncs{job=\"$job\", instance=~\"$instance\"}",
+          "expr": "max_over_time(mariadb_innodb_os_log_pending_writes{job=\"$job\", instance=~\"$instance\"}[$interval]) or mariadb_innodb_os_log_pending_writes{job=\"$job\", instance=~\"$instance\"} or max_over_time(mariadb_innodb_os_log_pending_fsyncs{job=\"$job\", instance=~\"$instance\"}[$interval]) or mariadb_innodb_os_log_pending_fsyncs{job=\"$job\", instance=~\"$instance\"}",
           "refId": "A",
           "legendFormat": "Pending Log Operations"
         }
@@ -4067,7 +4067,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_innodb_log_write_ratio{job=\"$job\", instance=~\"$instance\"}",
+          "expr": "max_over_time(mariadb_innodb_log_write_ratio{job=\"$job\", instance=~\"$instance\"}[$interval]) or mariadb_innodb_log_write_ratio{job=\"$job\", instance=~\"$instance\"}",
           "refId": "A",
           "legendFormat": "Log Write Ratio (%)"
         }
@@ -4662,7 +4662,7 @@
               },
               "expr": "irate(mariadb_info_schema_query_response_time_seconds{job=\"$job\", instance=\"$instance\", le=~\".*0\\\\.000100|.*0\\\\.001000|.*0\\\\.010000|.*0\\\\.100000|.*1\\\\.000000|TOO LONG\"}[5m])",
               "refId": "A",
-              "legendFormat": "\u2264 {{le}}s"
+              "legendFormat": "≤ {{le}}s"
             }
           ],
           "title": "Query Response Time Buckets",
@@ -7336,6 +7336,60 @@
         "skipUrlSync": false,
         "sort": 1,
         "type": "query"
+      },
+      {
+        "auto": true,
+        "auto_count": 30,
+        "auto_min": "10s",
+        "current": {
+          "selected": false,
+          "text": "auto",
+          "value": "$__auto_interval_interval"
+        },
+        "hide": 0,
+        "name": "interval",
+        "options": [
+          {
+            "selected": true,
+            "text": "auto",
+            "value": "$__auto_interval_interval"
+          },
+          {
+            "selected": false,
+            "text": "1m",
+            "value": "1m"
+          },
+          {
+            "selected": false,
+            "text": "5m",
+            "value": "5m"
+          },
+          {
+            "selected": false,
+            "text": "10m",
+            "value": "10m"
+          },
+          {
+            "selected": false,
+            "text": "30m",
+            "value": "30m"
+          },
+          {
+            "selected": false,
+            "text": "1h",
+            "value": "1h"
+          },
+          {
+            "selected": false,
+            "text": "30s",
+            "value": "30s"
+          }
+        ],
+        "query": "30s,1m,5m,10m,30m,1h",
+        "queryValue": "",
+        "refresh": 2,
+        "skipUrlSync": false,
+        "type": "interval"
       }
     ]
   },
@@ -7345,7 +7399,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "MariaDB Comprehensive Dashboard",
+  "title": "MariaDB Monitoring Dashboard",
   "uid": "mariadb-comprehensive",
   "version": 1
 }

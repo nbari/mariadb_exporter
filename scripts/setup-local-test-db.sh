@@ -16,7 +16,7 @@ timeout 30 bash -c "until mysqladmin ping -h ${HOST} -P ${PORT} -u${USER} -p${PA
 }
 
 # Create test database and tables
-mysql -h "$HOST" -P "$PORT" -u "$USER" -p"$PASS" <<'EOF' 2>/dev/null || true
+mariadb -h "$HOST" -P "$PORT" -u "$USER" -p"$PASS" <<'EOF' 2>/dev/null || true
 -- Create test database
 CREATE DATABASE IF NOT EXISTS testdb;
 USE testdb;

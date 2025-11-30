@@ -9,7 +9,7 @@ PASS="${4:-root}"
 
 echo "📊 Creating test database and tables..."
 
-mysql -h "$HOST" -P "$PORT" -u "$USER" -p"$PASS" <<'EOF'
+mariadb -h "$HOST" -P "$PORT" -u "$USER" -p"$PASS" <<'EOF'
 -- Create test database
 CREATE DATABASE IF NOT EXISTS testdb;
 USE testdb;

@@ -2,21 +2,18 @@
 -- Run this script as root or a user with GRANT privileges
 --
 -- For socket connection (recommended):
---   mysql -uroot -p < setup-exporter-user.sql
+--   mariadb -uroot -p < setup-exporter-user.sql
 --
 -- This creates a secure exporter user with minimal privileges
 
--- Create user for local socket connection (no password needed)
-CREATE USER IF NOT EXISTS 'exporter'@'localhost' IDENTIFIED BY '';
+-- Create user for local socket connection with connection limit
+CREATE USER IF NOT EXISTS 'exporter'@'localhost' IDENTIFIED BY '' WITH MAX_USER_CONNECTIONS 3;
 
 -- Grant minimal required permissions
 -- SELECT: Read table data and system tables
 -- PROCESS: View server processes (SHOW PROCESSLIST)
 -- REPLICATION CLIENT: View replication status (SHOW SLAVE STATUS)
 GRANT SELECT, PROCESS, REPLICATION CLIENT ON *.* TO 'exporter'@'localhost';
-
--- Limit concurrent connections (matches exporter connection pool: 1-3 connections)
-ALTER USER 'exporter'@'localhost' WITH MAX_USER_CONNECTIONS 3;
 
 -- Apply changes
 FLUSH PRIVILEGES;

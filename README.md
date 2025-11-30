@@ -31,14 +31,11 @@ cargo install mariadb_exporter
 Create the exporter user with minimal privileges:
 
 ```sql
--- Create user for local socket connection only
-CREATE USER 'exporter'@'localhost' IDENTIFIED BY '';
+-- Create user for local socket connection only with connection limit
+CREATE USER 'exporter'@'localhost' IDENTIFIED BY '' WITH MAX_USER_CONNECTIONS 3;
 
 -- Grant minimal required permissions for all collectors
 GRANT SELECT, PROCESS, REPLICATION CLIENT ON *.* TO 'exporter'@'localhost';
-
--- Limit concurrent connections (matches connection pool size)
-ALTER USER 'exporter'@'localhost' WITH MAX_USER_CONNECTIONS 3;
 
 FLUSH PRIVILEGES;
 ```
@@ -67,9 +64,8 @@ mariadb_exporter --dsn "mysql://exporter:password@host:3306/mysql"
 Create user for network access:
 
 ```sql
-CREATE USER 'exporter'@'%' IDENTIFIED BY 'strong_password_here';
+CREATE USER 'exporter'@'%' IDENTIFIED BY 'strong_password_here' WITH MAX_USER_CONNECTIONS 3;
 GRANT SELECT, PROCESS, REPLICATION CLIENT ON *.* TO 'exporter'@'%';
-ALTER USER 'exporter'@'%' WITH MAX_USER_CONNECTIONS 3;
 FLUSH PRIVILEGES;
 ```
 
