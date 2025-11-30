@@ -25,9 +25,9 @@ impl MetadataCollector {
             lock_info_count: IntGaugeVec::new(
                 Opts::new(
                     "mariadb_metadata_lock_info_count",
-                    "Count of metadata locks by status/type (metadata_lock_info plugin)",
+                    "Count of metadata locks by mode and type (metadata_lock_info plugin)",
                 ),
-                &["status", "type"],
+                &["mode", "type"],
             )
             .expect("valid mariadb_metadata_lock_info_count metric"),
         }
@@ -89,19 +89,25 @@ impl Collector for MetadataCollector {
                 otel.kind = "client"
             );
 
-            let rows = sqlx::query_as::<_, (Option<String>, Option<String>, i64)>(
-                "SELECT LOCK_TYPE, LOCK_STATUS, COUNT(*) as cnt FROM information_schema.metadata_lock_info GROUP BY LOCK_TYPE, LOCK_STATUS",
+            let rows = match sqlx::query_as::<_, (Option<String>, Option<String>, i64)>(
+                "SELECT LOCK_MODE, LOCK_TYPE, COUNT(*) as cnt FROM information_schema.metadata_lock_info GROUP BY LOCK_MODE, LOCK_TYPE",
             )
             .fetch_all(pool)
             .instrument(span)
             .await
-            .unwrap_or_default();
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!("Metadata lock info query failed: {}", e);
+                    vec![]
+                }
+            };
 
-            for (lock_type, status, cnt) in rows {
-                let lt = lock_type.unwrap_or_else(|| "unknown".to_string());
-                let st = status.unwrap_or_else(|| "unknown".to_string());
+            for (lock_mode, lock_type, cnt) in rows {
+                let mode = lock_mode.unwrap_or_else(|| "unknown".to_string());
+                let ltype = lock_type.unwrap_or_else(|| "unknown".to_string());
                 self.lock_info_count
-                    .with_label_values(&[st.as_str(), lt.as_str()])
+                    .with_label_values(&[mode.as_str(), ltype.as_str()])
                     .set(cnt);
             }
 

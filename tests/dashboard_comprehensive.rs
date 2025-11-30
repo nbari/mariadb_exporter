@@ -100,6 +100,16 @@ fn extract_metric_names(expr: &str, metrics: &mut HashSet<String>) {
         .collect();
     for word in words {
         if word.starts_with("mariadb_") {
+            // For histogram metrics, strip _sum/_count/_bucket to get base name
+            // but preserve _total for counters and the full metric name
+            if word.ends_with("_sum") || word.ends_with("_count") || word.ends_with("_bucket") {
+                let base_metric = word
+                    .trim_end_matches("_bucket")
+                    .trim_end_matches("_count")
+                    .trim_end_matches("_sum");
+                metrics.insert(base_metric.to_string());
+            }
+            // Always insert the full metric name as well
             metrics.insert(word.to_string());
         }
     }

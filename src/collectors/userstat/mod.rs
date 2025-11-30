@@ -1,15 +1,15 @@
 use crate::collectors::Collector;
 use anyhow::Result;
 use futures::future::BoxFuture;
-use prometheus::{IntGauge, IntGaugeVec, Opts, Registry};
+use prometheus::{IntGaugeVec, Opts, Registry};
 use sqlx::MySqlPool;
 use tracing::{debug, info_span, instrument};
 use tracing_futures::Instrument as _;
 
 /// User statistics collector (opt-in; requires userstat=1).
 #[derive(Clone)]
+#[allow(clippy::struct_field_names)]
 pub struct UserStatCollector {
-    userstat_enabled: IntGauge,
     connections_total: IntGaugeVec,
     bytes_received_total: IntGaugeVec,
     bytes_sent_total: IntGaugeVec,
@@ -35,11 +35,6 @@ impl UserStatCollector {
         };
 
         Self {
-            userstat_enabled: IntGauge::new(
-                "mariadb_userstat_enabled",
-                "Whether user statistics (userstat) are enabled (1/0)",
-            )
-            .expect("valid mariadb_userstat_enabled metric"),
             connections_total: gvec(
                 "mariadb_info_schema_userstats_connections_total",
                 "Total connections per user (user_statistics)",
@@ -94,7 +89,6 @@ impl Collector for UserStatCollector {
         fields(collector = "userstat")
     )]
     fn register_metrics(&self, registry: &Registry) -> Result<()> {
-        registry.register(Box::new(self.userstat_enabled.clone()))?;
         registry.register(Box::new(self.connections_total.clone()))?;
         registry.register(Box::new(self.bytes_received_total.clone()))?;
         registry.register(Box::new(self.bytes_sent_total.clone()))?;
@@ -122,9 +116,9 @@ impl Collector for UserStatCollector {
                 .instrument(status_span)
                 .await
                 .unwrap_or(0);
-            self.userstat_enabled.set(enabled);
 
             if enabled == 0 {
+                debug!("userstat is disabled, skipping collection");
                 return Ok(());
             }
 
@@ -159,7 +153,7 @@ impl Collector for UserStatCollector {
                 otel.kind = "client"
             );
 
-            let rows = sqlx::query_as::<_, (String, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64)>(
+            let rows = match sqlx::query_as::<_, (String, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64)>(
                 "SELECT USER, TOTAL_CONNECTIONS, BYTES_RECEIVED, BYTES_SENT,
                         ROWS_READ, ROWS_SENT, ROWS_DELETED, ROWS_INSERTED, ROWS_UPDATED,
                         0 as rows_tmp1, 0 as rows_tmp2, 0 as rows_tmp3
@@ -168,7 +162,13 @@ impl Collector for UserStatCollector {
             .fetch_all(pool)
             .instrument(span)
             .await
-            .unwrap_or_default();
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!("User statistics query failed: {}", e);
+                    vec![]
+                }
+            };
 
             for (user, total_conn, bytes_recv, bytes_sent, rows_read, rows_sent, rows_del, rows_ins, rows_upd, _, _, _) in rows {
                 let u = user.as_str();

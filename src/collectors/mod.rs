@@ -53,7 +53,6 @@ register_collectors! {
     exporter => ExporterCollector,
     tls => TlsCollector,
     query_response_time => QueryResponseTimeCollector,
-    audit => AuditCollector,
     statements => StatementsCollector,
     schema => SchemaCollector,
     replication => ReplicationCollector,

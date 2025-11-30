@@ -4,6 +4,7 @@ target
 .envrc
 db/data
 db/log
+db/conf/certs
 .otel-collector-config.yml
 .DS_Store
 

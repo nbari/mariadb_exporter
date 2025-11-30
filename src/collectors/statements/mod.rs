@@ -110,7 +110,7 @@ impl Collector for StatementsCollector {
                 otel.kind = "client"
             );
 
-            let totals = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64)>(
+            let totals = sqlx::query_as::<_, (u64, u64, u64, u64, u64, u64)>(
                 "SELECT
                     COALESCE(SUM(COUNT_STAR),0) as total,
                     COALESCE(SUM(SUM_ERRORS),0) as errors,
@@ -125,14 +125,18 @@ impl Collector for StatementsCollector {
             .await
             .unwrap_or((0, 0, 0, 0, 0, 0));
 
-            let latency_seconds = totals.5 / 1_000_000_000_000; // pico -> seconds
+            #[allow(clippy::cast_possible_wrap)]
+            let latency_seconds = (totals.5 / 1_000_000_000_000) as i64;
 
-            self.digest_total.set(totals.0);
-            self.digest_errors.set(totals.1);
-            self.digest_warnings.set(totals.2);
-            self.digest_rows_examined.set(totals.3);
-            self.digest_rows_sent.set(totals.4);
-            self.digest_latency_seconds.set(latency_seconds);
+            #[allow(clippy::cast_possible_wrap)]
+            {
+                self.digest_total.set(totals.0 as i64);
+                self.digest_errors.set(totals.1 as i64);
+                self.digest_warnings.set(totals.2 as i64);
+                self.digest_rows_examined.set(totals.3 as i64);
+                self.digest_rows_sent.set(totals.4 as i64);
+                self.digest_latency_seconds.set(latency_seconds);
+            }
 
             // Top digests by latency (limit 5 to keep cardinality sane)
             let top_span = info_span!(
@@ -143,7 +147,7 @@ impl Collector for StatementsCollector {
                 otel.kind = "client"
             );
 
-            let rows = sqlx::query_as::<_, (Option<String>, Option<String>, i64)>(
+            let rows = match sqlx::query_as::<_, (Option<String>, Option<String>, u64)>(
                 "SELECT DIGEST_TEXT, SCHEMA_NAME, SUM_TIMER_WAIT
                  FROM performance_schema.events_statements_summary_by_digest
                  ORDER BY SUM_TIMER_WAIT DESC
@@ -152,14 +156,22 @@ impl Collector for StatementsCollector {
             .fetch_all(pool)
             .instrument(top_span)
             .await
-            .unwrap_or_default();
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!("Statements digest query failed: {}", e);
+                    vec![]
+                }
+            };
 
             for (digest, schema, latency_ps) in rows {
                 let digest_label = digest.unwrap_or_else(|| "unknown".to_string());
                 let schema_label = schema.unwrap_or_else(|| "unknown".to_string());
+                #[allow(clippy::cast_possible_wrap)]
+                let latency_seconds = (latency_ps / 1_000_000_000_000) as i64;
                 self.top_digest_latencies
                     .with_label_values(&[digest_label.as_str(), schema_label.as_str()])
-                    .set(latency_ps / 1_000_000_000_000);
+                    .set(latency_seconds);
             }
 
             Ok(())

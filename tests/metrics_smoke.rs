@@ -151,6 +151,10 @@ async fn run_assertions(pool: sqlx::MySqlPool, extra_needles: &[&str]) -> anyhow
     );
     let registry = CollectorRegistry::new(&config);
 
+    // First scrape - establishes the count
+    let _first = registry.collect_all(&pool).await?;
+
+    // Second scrape - the count from first scrape is now visible
     let metrics = registry.collect_all(&pool).await?;
     let samples: Vec<&str> = metrics
         .lines()
@@ -177,6 +181,21 @@ async fn run_assertions(pool: sqlx::MySqlPool, extra_needles: &[&str]) -> anyhow
             "metrics output should contain a sample for {needle}"
         );
     }
+
+    // Verify mariadb_exporter_metrics_total matches actual count
+    // Note: due to eventual consistency, the reported count is from the PREVIOUS scrape
+    let actual_count = samples.len();
+    let reported_count = samples
+        .iter()
+        .find(|line| line.starts_with("mariadb_exporter_metrics_total"))
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|s| s.parse::<usize>().ok())
+        .expect("mariadb_exporter_metrics_total should have a valid count");
+
+    assert_eq!(
+        actual_count, reported_count,
+        "mariadb_exporter_metrics_total ({reported_count}) should match actual sample count ({actual_count})"
+    );
 
     Ok(())
 }

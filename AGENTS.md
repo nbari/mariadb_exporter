@@ -8,8 +8,11 @@
 
 ## Build, Test, and Development Commands
 - `cargo build` – compile the exporter.
-- `cargo test` – run unit/integration tests (uses `MARIADB_EXPORTER_DSN` if set).
-- `just test` – lint (`clippy`), fmt check, start MariaDB via podman if needed, then run tests against `mysql://root:root@127.0.0.1:3306/mysql`.
+- `cargo test` – run all tests (unit, integration, collectors, exporter, dashboard).
+- `cargo test --test collectors_tests` – run comprehensive collector integration tests.
+- `cargo test --test exporter` – run HTTP server and binding tests.
+- `cargo test --test dashboard_comprehensive` – validate dashboard metrics coverage.
+- `just test` – lint (`clippy`), fmt check, start MariaDB via podman if needed, then run all tests against `mysql://root:root@127.0.0.1:3306/mysql`.
 - `cargo clippy --all-targets --all-features` – lint; required before commits.
 - `cargo fmt --all -- --check` – enforce formatting.
 - `just validate-dashboard` – validate Grafana JSON before pushing.
@@ -21,9 +24,13 @@
 - Favor small, single-purpose functions; prefer explicit error types over `Box<dyn Error>`.
 
 ## Testing Guidelines
-- Unit/integration tests use `cargo test`; set `MARIADB_EXPORTER_DSN` for custom targets.
+- Comprehensive collector tests in `tests/collectors/` mirror `src/collectors/` structure.
+- Each collector MUST have: registration test, collection test, feature availability test, edge case test.
+- Tests use `cargo test`; set `MARIADB_EXPORTER_DSN` for custom targets (defaults to `mysql://root:root@127.0.0.1:3306/mysql`).
 - For container-backed verification, use `just test` (podman required). Clean up with `just stop-containers`.
-- Name test files descriptively in `tests/`; use `#[tokio::test]` for async paths.
+- See `tests/TESTING.md` for detailed testing philosophy and patterns.
+- HTTP server tests in `tests/exporter.rs` validate bind addresses, endpoints, and startup/shutdown.
+- Dashboard tests in `tests/dashboard_comprehensive.rs` ensure Grafana dashboards use all collector metrics.
 - Coverage: `just coverage` (grcov) if you need an HTML report.
 
 ## Commit & Pull Request Guidelines

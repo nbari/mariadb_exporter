@@ -155,4 +155,11 @@ jobs:
       - name: Run tests
         env:
           MARIADB_EXPORTER_DSN: mysql://root:root@127.0.0.1:3306/mysql
-        run: cargo test
+        run: |
+          # Runs all tests:
+          # - Unit tests (143+)
+          # - Collector integration tests (28)
+          # - Exporter HTTP server tests (8)
+          # - Dashboard validation tests (3)
+          # - Smoke tests (2)
+          cargo test

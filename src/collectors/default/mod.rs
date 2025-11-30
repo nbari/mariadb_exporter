@@ -14,6 +14,9 @@ use version::VersionCollector;
 pub mod status;
 use status::StatusCollector;
 
+pub mod plugins;
+use plugins::PluginsCollector;
+
 /// `DefaultCollector` bundles lightweight always-on signals.
 #[derive(Clone, Default)]
 pub struct DefaultCollector {
@@ -27,6 +30,7 @@ impl DefaultCollector {
             subs: vec![
                 Arc::new(VersionCollector::new()),
                 Arc::new(StatusCollector::new()),
+                Arc::new(PluginsCollector::new()),
             ],
         }
     }

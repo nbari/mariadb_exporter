@@ -92,18 +92,24 @@ impl Collector for QueryResponseTimeCollector {
                 otel.kind = "client"
             );
 
-            let rows = sqlx::query_as::<_, (String, i64)>(
+            let rows = match sqlx::query_as::<_, (String, u64)>(
                 "SELECT TIME, COUNT FROM information_schema.QUERY_RESPONSE_TIME",
             )
             .fetch_all(pool)
             .instrument(span)
             .await
-            .unwrap_or_default();
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!("Query response time query failed: {}", e);
+                    vec![]
+                }
+            };
 
             for (bucket, count) in rows {
                 self.response_time_seconds
                     .with_label_values(&[bucket.as_str()])
-                    .set(count);
+                    .set(i64::try_from(count).unwrap_or(i64::MAX));
             }
 
             Ok(())

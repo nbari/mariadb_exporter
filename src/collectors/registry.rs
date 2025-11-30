@@ -218,18 +218,23 @@ impl CollectorRegistry {
         let encoder = TextEncoder::new();
         let metric_families = self.registry.gather();
 
-        // Update metrics count for next scrape
-        // Note: This count will be visible in the NEXT scrape (eventual consistency)
-        if let Some(ref scraper) = self.scraper {
-            let total_metrics: i64 = metric_families
-                .iter()
-                .map(|mf| i64::try_from(mf.get_metric().len()).unwrap_or(0))
-                .sum();
-            scraper.update_metrics_count(total_metrics);
-        }
-
         let mut buffer = Vec::new();
         encoder.encode(&metric_families, &mut buffer)?;
+
+        // Update metrics count for next scrape based on actual output
+        // This matches: curl /metrics | grep -v '^#' | grep -v '^$' | wc -l
+        // Note: The count will be visible in the NEXT scrape (eventual consistency)
+        if let Some(ref scraper) = self.scraper {
+            let output = String::from_utf8_lossy(&buffer);
+            let sample_count: i64 = output
+                .lines()
+                .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+                .count()
+                .try_into()
+                .unwrap_or(0);
+
+            scraper.update_metrics_count(sample_count);
+        }
 
         drop(guard);
 

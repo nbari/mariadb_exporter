@@ -115,8 +115,8 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 3,
-        "w": 5,
+        "h": 2,
+        "w": 3,
         "x": 0,
         "y": 1
       },
@@ -175,9 +175,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 3,
-        "w": 5,
-        "x": 5,
+        "h": 2,
+        "w": 3,
+        "x": 3,
         "y": 1
       },
       "id": 3,
@@ -234,9 +234,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 3,
-        "w": 5,
-        "x": 10,
+        "h": 2,
+        "w": 3,
+        "x": 6,
         "y": 1
       },
       "id": 4,
@@ -293,9 +293,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 3,
-        "w": 5,
-        "x": 15,
+        "h": 2,
+        "w": 3,
+        "x": 9,
         "y": 1
       },
       "id": 5,
@@ -353,9 +353,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 3,
-        "w": 4,
-        "x": 20,
+        "h": 2,
+        "w": 3,
+        "x": 12,
         "y": 1
       },
       "id": 6,
@@ -387,12 +387,196 @@
       "type": "stat"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "SSL/TLS status - verify encryption is properly configured",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "bool"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 3,
+        "x": 15,
+        "y": 1
+      },
+      "id": 276,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_ssl_server_configured{instance=~\"$instance\",job=~\"$job\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "SSL/TLS",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "User statistics tracking status (userstat=1)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bool"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 3,
+        "x": 18,
+        "y": 1
+      },
+      "id": 314,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "pluginVersion": "9.5.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_userstat_enabled{job=\"$job\", instance=\"$instance\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "User Stats",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Audit log plugin status - compliance monitoring",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bool"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 3,
+        "x": 21,
+        "y": 1
+      },
+      "id": 304,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      },
+      "pluginVersion": "9.5.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_audit_log_enabled{job=\"$job\", instance=\"$instance\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Audit Log",
+      "type": "stat"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 11
+        "y": 3
       },
       "id": 9,
       "panels": [],
@@ -404,7 +588,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "**Goal**: Monitor connection rate\n**Action**: High rate may indicate connection pooling issues",
+      "description": "**Goal**: Monitor connection capacity usage\n**Action**: If connections approach max_connections, increase the limit or investigate connection leaks",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -413,11 +597,11 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "Connections",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "tooltip": false,
@@ -430,11 +614,11 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "never",
+            "showPoints": "auto",
             "spanNulls": false,
             "stacking": {
-              "mode": "none",
-              "group": "A"
+              "group": "A",
+              "mode": "none"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -450,26 +634,56 @@
               }
             ]
           },
-          "unit": "cps"
+          "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max Connections (configured limit)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 8,
         "x": 0,
-        "y": 12
+        "y": 18
       },
       "id": 10,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -479,11 +693,30 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_connections{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "A",
+          "legendFormat": "Active Connections"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_global_status_max_used_connections{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "B",
+          "legendFormat": "Max Used Connections (since startup)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_global_variables_max_connections{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "C",
+          "legendFormat": "Max Connections (configured limit)"
         }
       ],
-      "title": "Connections",
+      "title": "Connection Usage",
       "type": "timeseries"
     },
     {
@@ -491,7 +724,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "**Goal**: Track active connections\n**Action**: Compare with max_connections to avoid saturation",
+      "description": "**Goal**: Monitor thread usage and connection capacity\n**Action**: High thread creation rate may indicate connection churn",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -539,19 +772,53 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max Connections (limit)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 8,
         "x": 8,
-        "y": 12
+        "y": 18
       },
       "id": 11,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -567,7 +834,26 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "Threads Connected"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_global_status_threads_created{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "B",
+          "legendFormat": "Threads Created (cumulative)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_global_variables_max_connections{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "C",
+          "legendFormat": "Max Connections (limit)"
         }
       ],
       "title": "Threads",
@@ -578,7 +864,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "**Goal**: Monitor actively executing queries\n**Action**: Spikes indicate query backlog or slow queries",
+      "description": "**Goal**: Monitor active query execution threads\n**Action**: High running threads may indicate slow queries or high load",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -626,19 +912,53 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Threads Connected (reference)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "semi-dark-orange"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 8,
         "x": 16,
-        "y": 12
+        "y": 18
       },
       "id": 12,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -654,7 +974,17 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "mariadb_global_status_threads_running{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "Threads Running"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "mariadb_global_status_threads_connected{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "B",
+          "legendFormat": "Threads Connected (reference)"
         }
       ],
       "title": "Running Threads",
@@ -665,7 +995,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "**Goal**: Detect connection problems\n**Action**: Investigate network issues, authentication failures, or client crashes",
+      "description": "**Goal**: Monitor connection abort patterns\\n**Action**: High aborted connects = connection issues; High aborted clients = client disconnects",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -716,16 +1046,20 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 0,
-        "y": 21
+        "y": 30
       },
       "id": 13,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -738,10 +1072,24 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
-          "expr": "rate(mariadb_global_status_aborted_connects{job=\"$job\", instance=~\"$instance\"}[5m]) + rate(mariadb_global_status_aborted_clients{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "editorMode": "code",
+          "expr": "mariadb_global_status_aborted_connects{job=\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "Aborted Connects",
+          "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "mariadb_global_status_aborted_clients{job=\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "Aborted Clients",
+          "range": true,
+          "refId": "B"
         }
       ],
       "title": "Aborted Connections",
@@ -752,7 +1100,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "**Goal**: Monitor connection rejections\n**Action**: Increase max_connections or investigate server overload",
+      "description": "**Goal**: Monitor connection error types\\n**Action**: Max connections errors indicate capacity issues; Check max_connections setting",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -803,16 +1151,20 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 12,
-        "y": 21
+        "y": 30
       },
       "id": 14,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -825,10 +1177,35 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "${datasource}"
           },
-          "expr": "rate(mariadb_global_status_connection_errors_max_connections{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_connection_errors_too_many_connections{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_connection_errors_refused{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "editorMode": "code",
+          "expr": "mariadb_global_status_connection_errors_max_connections{job=\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "Max Connections Reached",
+          "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "mariadb_global_status_connection_errors_too_many_connections{job=\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "Too Many Connections",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "mariadb_global_status_connection_errors_refused{job=\"$job\", instance=~\"$instance\"}",
+          "legendFormat": "Connection Refused",
+          "range": true,
+          "refId": "C"
         }
       ],
       "title": "Connection Errors",
@@ -840,7 +1217,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 58
       },
       "id": 15,
       "panels": [],
@@ -906,13 +1283,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 31
+        "y": 59
       },
       "id": 16,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -928,7 +1309,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "rate(mariadb_global_status_queries_total{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_questions_total{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "Queries/Questions per second"
         }
       ],
       "title": "Query Rate (Queries vs Questions)",
@@ -993,13 +1375,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 31
+        "y": 67
       },
       "id": 17,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1014,8 +1400,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_slow_queries{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_global_status_slow_queries{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Slow Queries per second"
         }
       ],
       "title": "Slow Queries",
@@ -1080,13 +1467,17 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 40
+        "y": 75
       },
       "id": 18,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1101,8 +1492,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_select_scan{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_select_range{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_select_full_join{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_global_status_select_scan{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_global_status_select_range{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_global_status_select_full_join{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "SELECT Operations per second"
         }
       ],
       "title": "SELECT Operations",
@@ -1167,13 +1559,17 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 40
+        "y": 83
       },
       "id": 19,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1188,8 +1584,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_sort_scan{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_sort_range{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_sort_rows{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_global_status_sort_scan{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_global_status_sort_range{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_global_status_sort_rows{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Sort Range"
         }
       ],
       "title": "Sort Operations",
@@ -1254,13 +1651,17 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 40
+        "y": 91
       },
       "id": 20,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1275,8 +1676,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_sort_merge_passes{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_global_status_sort_merge_passes{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Sort Merge Passes"
         }
       ],
       "title": "Sort Merge Passes",
@@ -1288,7 +1690,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 99
       },
       "id": 21,
       "panels": [],
@@ -1354,13 +1756,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 50
+        "y": 100
       },
       "id": 22,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1375,8 +1781,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_handler_read_key{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_handler_read_rnd_next{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_global_status_handler_read_key{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_global_status_handler_read_rnd_next{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Index Reads vs Table Scans per second"
         }
       ],
       "title": "Handler Reads (Index vs Table Scan)",
@@ -1441,13 +1848,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 50
+        "y": 108
       },
       "id": 23,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1462,8 +1873,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_handler_write{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_handler_update{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_handler_delete{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_global_status_handler_write{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_global_status_handler_update{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_global_status_handler_delete{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Write/Update/Delete Operations per second"
         }
       ],
       "title": "Handler Write Operations",
@@ -1475,7 +1887,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 59
+        "y": 116
       },
       "id": 24,
       "panels": [],
@@ -1541,13 +1953,17 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 60
+        "y": 117
       },
       "id": 25,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1562,8 +1978,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_created_tmp_tables{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_global_status_created_tmp_tables{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Temporary Tables Created per second"
         }
       ],
       "title": "Temporary Tables Created",
@@ -1628,13 +2045,17 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 60
+        "y": 125
       },
       "id": 26,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1649,8 +2070,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_created_tmp_disk_tables{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_global_status_created_tmp_disk_tables{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Disk-based Temporary Tables per second"
         }
       ],
       "title": "Temporary Tables on Disk",
@@ -1715,13 +2137,17 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 60
+        "y": 133
       },
       "id": 27,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1736,8 +2162,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_created_tmp_files{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_global_status_created_tmp_files{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Temporary Files Created"
         }
       ],
       "title": "Temporary Files",
@@ -1749,7 +2176,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 141
       },
       "id": 28,
       "panels": [],
@@ -1815,13 +2242,17 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 70
+        "y": 142
       },
       "id": 29,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1836,8 +2267,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(rate(mariadb_global_status_table_open_cache_hits{job=\"$job\", instance=~\"$instance\"}[5m]) / (rate(mariadb_global_status_table_open_cache_hits{job=\"$job\", instance=~\"$instance\"}[5m]) + rate(mariadb_global_status_table_open_cache_misses{job=\"$job\", instance=~\"$instance\"}[5m]))) * 100",
-          "refId": "A"
+          "expr": "(irate(mariadb_global_status_table_open_cache_hits{job=\"$job\", instance=~\"$instance\"}[5m]) / (irate(mariadb_global_status_table_open_cache_hits{job=\"$job\", instance=~\"$instance\"}[5m]) + irate(mariadb_global_status_table_open_cache_misses{job=\"$job\", instance=~\"$instance\"}[5m]))) * 100",
+          "refId": "A",
+          "legendFormat": "Table Cache Hit Rate (%)"
         }
       ],
       "title": "Table Cache Hit Rate",
@@ -1902,13 +2334,17 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 70
+        "y": 150
       },
       "id": 30,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1923,8 +2359,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(1 - (rate(mariadb_global_status_threads_created{job=\"$job\", instance=~\"$instance\"}[5m]) / rate(mariadb_global_status_connections{job=\"$job\", instance=~\"$instance\"}[5m]))) * 100",
-          "refId": "A"
+          "expr": "(1 - (irate(mariadb_global_status_threads_created{job=\"$job\", instance=~\"$instance\"}[5m]) / irate(mariadb_global_status_connections{job=\"$job\", instance=~\"$instance\"}[5m]))) * 100",
+          "refId": "A",
+          "legendFormat": "Thread Cache Hit Rate (%)"
         }
       ],
       "title": "Thread Cache Hit Rate",
@@ -1989,13 +2426,17 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 70
+        "y": 158
       },
       "id": 31,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2010,8 +2451,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(1 - (rate(mariadb_global_status_key_reads{job=\"$job\", instance=~\"$instance\"}[5m]) / rate(mariadb_global_status_key_read_requests{job=\"$job\", instance=~\"$instance\"}[5m]))) * 100",
-          "refId": "A"
+          "expr": "(1 - (irate(mariadb_global_status_key_reads{job=\"$job\", instance=~\"$instance\"}[5m]) / irate(mariadb_global_status_key_read_requests{job=\"$job\", instance=~\"$instance\"}[5m]))) * 100",
+          "refId": "A",
+          "legendFormat": "MyISAM Key Buffer Hit Rate (%)"
         }
       ],
       "title": "Key Buffer Hit Rate (MyISAM)",
@@ -2023,7 +2465,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 79
+        "y": 166
       },
       "id": 32,
       "panels": [],
@@ -2089,13 +2531,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 80
+        "y": 167
       },
       "id": 33,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2111,7 +2557,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "mariadb_innodb_buffer_pool_pages_data{job=\"$job\", instance=~\"$instance\"} or mariadb_innodb_buffer_pool_pages_dirty{job=\"$job\", instance=~\"$instance\"} or mariadb_innodb_buffer_pool_pages_free{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "Data/Dirty/Free Pages"
         }
       ],
       "title": "Buffer Pool Pages",
@@ -2176,13 +2623,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 80
+        "y": 175
       },
       "id": 34,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2197,8 +2648,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(rate(mariadb_innodb_buffer_pool_read_requests{job=\"$job\", instance=~\"$instance\"}[5m]) - rate(mariadb_innodb_buffer_pool_reads{job=\"$job\", instance=~\"$instance\"}[5m])) / rate(mariadb_innodb_buffer_pool_read_requests{job=\"$job\", instance=~\"$instance\"}[5m]) * 100",
-          "refId": "A"
+          "expr": "(irate(mariadb_innodb_buffer_pool_read_requests{job=\"$job\", instance=~\"$instance\"}[5m]) - irate(mariadb_innodb_buffer_pool_reads{job=\"$job\", instance=~\"$instance\"}[5m])) / irate(mariadb_innodb_buffer_pool_read_requests{job=\"$job\", instance=~\"$instance\"}[5m]) * 100",
+          "refId": "A",
+          "legendFormat": "Buffer Pool Hit Rate (%)"
         }
       ],
       "title": "Buffer Pool Hit Rate",
@@ -2263,13 +2715,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 89
+        "y": 183
       },
       "id": 35,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2284,8 +2740,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_innodb_buffer_pool_read_ahead{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_innodb_buffer_pool_read_ahead_evicted{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_innodb_buffer_pool_read_ahead{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_innodb_buffer_pool_read_ahead_evicted{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Read-Ahead / Evicted Pages per second"
         }
       ],
       "title": "Buffer Pool Read-Ahead",
@@ -2350,13 +2807,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 89
+        "y": 191
       },
       "id": 36,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2371,8 +2832,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_innodb_buffer_pool_wait_free{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_innodb_buffer_pool_wait_free{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Wait Free Buffer Pages per second"
         }
       ],
       "title": "Buffer Pool Wait Free",
@@ -2384,7 +2846,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 98
+        "y": 199
       },
       "id": 37,
       "panels": [],
@@ -2450,13 +2912,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 99
+        "y": 200
       },
       "id": 38,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2471,8 +2937,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_innodb_rows_read{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_innodb_rows_inserted{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_innodb_rows_updated{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_innodb_rows_deleted{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_innodb_rows_read{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_innodb_rows_inserted{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_innodb_rows_updated{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_innodb_rows_deleted{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Row Operations per second"
         }
       ],
       "title": "InnoDB Row Operations",
@@ -2537,13 +3004,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 99
+        "y": 208
       },
       "id": 39,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2558,8 +3029,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_innodb_data_read_bytes{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_innodb_data_written_bytes{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_innodb_data_read_bytes{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_innodb_data_written_bytes{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Data I/O (bytes per second)"
         }
       ],
       "title": "InnoDB Data I/O",
@@ -2624,13 +3096,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 108
+        "y": 216
       },
       "id": 40,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2645,8 +3121,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_innodb_data_reads{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_innodb_data_writes{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_innodb_data_reads{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_innodb_data_writes{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Data Reads/Writes per second"
         }
       ],
       "title": "InnoDB Data Reads/Writes",
@@ -2711,13 +3188,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 108
+        "y": 224
       },
       "id": 41,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2732,8 +3213,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_innodb_data_fsyncs{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_innodb_data_fsyncs{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Data Fsyncs per second"
         }
       ],
       "title": "InnoDB Data Fsyncs",
@@ -2745,7 +3227,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 117
+        "y": 232
       },
       "id": 42,
       "panels": [],
@@ -2811,13 +3293,17 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 118
+        "y": 233
       },
       "id": 43,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2833,7 +3319,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "rate(mariadb_innodb_deadlocks_total{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "Deadlocks per second"
         }
       ],
       "title": "InnoDB Deadlocks",
@@ -2898,13 +3385,17 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 118
+        "y": 241
       },
       "id": 44,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -2920,7 +3411,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "rate(mariadb_innodb_lock_timeouts_total{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "Lock Timeouts per second"
         }
       ],
       "title": "InnoDB Lock Timeouts",
@@ -2985,13 +3477,17 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 118
+        "y": 249
       },
       "id": 45,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3006,8 +3502,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_innodb_row_lock_waits{job=\"$job\", instance=~\"$instance\"}[5m]) or mariadb_innodb_row_lock_current_waits{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "expr": "irate(mariadb_innodb_row_lock_waits{job=\"$job\", instance=~\"$instance\"}[5m]) or mariadb_innodb_row_lock_current_waits{job=\"$job\", instance=~\"$instance\"}",
+          "refId": "A",
+          "legendFormat": "Row Lock Waits per second"
         }
       ],
       "title": "InnoDB Row Lock Waits",
@@ -3072,13 +3569,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 127
+        "y": 257
       },
       "id": 46,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3093,8 +3594,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_innodb_row_lock_time_seconds{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_innodb_row_lock_time_seconds{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Row Lock Wait Time (ms)"
         }
       ],
       "title": "InnoDB Row Lock Time",
@@ -3159,13 +3661,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 127
+        "y": 265
       },
       "id": 47,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3181,7 +3687,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "mariadb_innodb_history_list_length{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "History List Length (uncommitted transactions)"
         }
       ],
       "title": "InnoDB History List Length",
@@ -3193,7 +3700,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 136
+        "y": 273
       },
       "id": 48,
       "panels": [],
@@ -3259,13 +3766,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 137
+        "y": 274
       },
       "id": 49,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3280,8 +3791,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_innodb_log_written{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_innodb_os_log_written_bytes{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_innodb_log_written{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_innodb_os_log_written_bytes{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Log Written (bytes per second)"
         }
       ],
       "title": "InnoDB Log Written",
@@ -3346,13 +3858,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 137
+        "y": 282
       },
       "id": 50,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3367,8 +3883,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_innodb_log_waits{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_innodb_os_log_fsyncs{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_innodb_log_waits{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_innodb_os_log_fsyncs{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Log Waits & Fsyncs per second"
         }
       ],
       "title": "InnoDB Log Waits & Fsyncs",
@@ -3433,13 +3950,17 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 146
+        "y": 290
       },
       "id": 51,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3455,7 +3976,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "mariadb_innodb_os_log_pending_writes{job=\"$job\", instance=~\"$instance\"} or mariadb_innodb_os_log_pending_fsyncs{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "Pending Log Operations"
         }
       ],
       "title": "InnoDB Log Pending Operations",
@@ -3520,13 +4042,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 146
+        "y": 298
       },
       "id": 52,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3542,7 +4068,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "expr": "mariadb_innodb_log_write_ratio{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "refId": "A",
+          "legendFormat": "Log Write Ratio (%)"
         }
       ],
       "title": "InnoDB Log Write Ratio",
@@ -3554,7 +4081,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 155
+        "y": 306
       },
       "id": 53,
       "panels": [],
@@ -3620,13 +4147,17 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 156
+        "y": 307
       },
       "id": 54,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3641,8 +4172,9 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_bytes_sent{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_bytes_received{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_global_status_bytes_sent{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_global_status_bytes_received{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Network Traffic (bytes per second)"
         }
       ],
       "title": "Network Traffic",
@@ -3654,7 +4186,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 165
+        "y": 315
       },
       "id": 55,
       "panels": [],
@@ -3720,13 +4252,17 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 166
+        "y": 316
       },
       "id": 56,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "max",
+            "min",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -3741,724 +4277,3001 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(mariadb_global_status_table_locks_immediate{job=\"$job\", instance=~\"$instance\"}[5m]) or rate(mariadb_global_status_table_locks_waited{job=\"$job\", instance=~\"$instance\"}[5m])",
-          "refId": "A"
+          "expr": "irate(mariadb_global_status_table_locks_immediate{job=\"$job\", instance=~\"$instance\"}[5m]) or irate(mariadb_global_status_table_locks_waited{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Table Lock Waits per second"
         }
       ],
       "title": "Table Locks",
       "type": "timeseries"
     },
     {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 175
+        "y": 324
       },
-      "id": 57,
-      "panels": [],
-      "title": "Exporter Self-Monitoring",
+      "id": 67,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "**Goal**: Display the active TLS version and cipher suite\n**Action**: Ensure modern TLS (1.2+) and strong ciphers are in use",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 8,
+            "x": 0,
+            "y": 6
+          },
+          "id": 77,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "vertical",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "name",
+            "text": {}
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_ssl_version_info{instance=~\"$instance\",job=~\"$job\"}",
+              "legendFormat": "{{version}} / {{cipher}}",
+              "refId": "A"
+            }
+          ],
+          "title": "TLS Version & Cipher",
+          "transformations": [],
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "**Goal**: Monitor SSL certificate expiration\n**Action**: Renew certificate before expiration. Alert if < 30 days remaining",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 90,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 7
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 30
+                  },
+                  {
+                    "color": "green",
+                    "value": 60
+                  }
+                ]
+              },
+              "unit": "days"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 8,
+            "x": 0,
+            "y": 1
+          },
+          "id": 78,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "(mariadb_ssl_cert_not_after_seconds{instance=~\"$instance\",job=~\"$job\"} - time()) / 86400",
+              "refId": "A"
+            }
+          ],
+          "title": "Certificate Expires In",
+          "type": "gauge"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "**Goal**: Visualize certificate validity period over time\n**Action**: Track certificate rotation and ensure validity window is maintained",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "dateTimeFromNow"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Valid From"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "blue"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Expires At"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "red"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 10,
+            "w": 16,
+            "x": 8,
+            "y": 1
+          },
+          "id": 79,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_ssl_cert_not_before_seconds{instance=~\"$instance\",job=~\"$job\"} * 1000",
+              "legendFormat": "Valid From",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_ssl_cert_not_after_seconds{instance=~\"$instance\",job=~\"$job\"} * 1000",
+              "legendFormat": "Expires At",
+              "refId": "B"
+            }
+          ],
+          "title": "Certificate Validity Period",
+          "type": "timeseries"
+        }
+      ],
+      "title": "TLS/SSL Security & Encryption (requires --collector.tls)",
       "type": "row"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "**Goal**: Monitor exporter CPU usage (normalized)\n**Action**: Should be minimal; high usage indicates collection issues",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
+      "collapsed": true,
       "gridPos": {
-        "h": 6,
-        "w": 8,
+        "h": 1,
+        "w": 24,
         "x": 0,
-        "y": 176
+        "y": 329
       },
-      "id": 58,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
+      "id": 68,
+      "panels": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_exporter_process_cpu_percent{job=\"$job\", instance=~\"$instance\"} / on(instance) mariadb_exporter_process_cpu_cores{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
-        }
-      ],
-      "title": "Exporter Process CPU Usage",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "**Goal**: Monitor memory consumption\n**Action**: Track RSS (resident) and VSZ (virtual) memory",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
+          "description": "Query rate per second for each response time bucket. Shows how many queries/sec are completing in each time range (requires query_response_time plugin)",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "Queries/sec",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
           },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 1
+          },
+          "id": 203,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
             },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
             }
           },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 8,
-        "y": 176
-      },
-      "id": 59,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "mariadb_exporter_process_resident_memory_bytes{job=\"$job\", instance=~\"$instance\"} or mariadb_exporter_process_virtual_memory_bytes{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "irate(mariadb_info_schema_query_response_time_seconds{job=\"$job\", instance=\"$instance\", le=~\".*0\\\\.000100|.*0\\\\.001000|.*0\\\\.010000|.*0\\\\.100000|.*1\\\\.000000|TOO LONG\"}[5m])",
+              "refId": "A",
+              "legendFormat": "\u2264 {{le}}s"
+            }
+          ],
+          "title": "Query Response Time Buckets",
+          "type": "timeseries"
         }
       ],
-      "title": "Exporter Memory Usage",
-      "type": "timeseries"
+      "title": "Query Response Time Distribution (requires --collector.query_response_time)",
+      "type": "row"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "**Goal**: Monitor file descriptor usage\n**Action**: Ensure not approaching system limits",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
+      "collapsed": true,
       "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 16,
-        "y": 176
-      },
-      "id": 60,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "mariadb_exporter_process_open_fds{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
-        }
-      ],
-      "title": "Open File Descriptors",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "**Goal**: Monitor collector success/failure\n**Action**: Investigate failures (0 values)",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 8,
+        "h": 1,
+        "w": 24,
         "x": 0,
-        "y": 183
+        "y": 331
       },
-      "id": 61,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
+      "id": 70,
+      "panels": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_exporter_collector_last_scrape_success{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
-        }
-      ],
-      "title": "Collector Health Timeline",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "**Goal**: Monitor collection performance\n**Action**: Slow scrapes may indicate database issues",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
+          "description": "Total number of statements tracked in performance_schema digests",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
           },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 1
+          },
+          "id": 205,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
             },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
             }
           },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "s"
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_perf_schema_digest_total{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "Total Statements"
+            }
+          ],
+          "title": "Statement Digest Total",
+          "type": "timeseries"
         },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 8,
-        "y": 183
-      },
-      "id": 62,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_exporter_collector_scrape_duration_seconds{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
-        }
-      ],
-      "title": "Collector Scrape Duration",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "**Goal**: Detect stale metrics\n**Action**: High values indicate scraping stopped",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
+          "description": "Total errors and warnings across all statement digests",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
           },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 1
+          },
+          "id": 206,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
             },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
             }
           },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "s"
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_perf_schema_digest_errors_total{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "Errors"
+            }
+          ],
+          "title": "Statement Errors & Warnings",
+          "type": "timeseries"
         },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 16,
-        "y": 183
-      },
-      "id": 63,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "time() - mariadb_exporter_collector_last_scrape_timestamp_seconds{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "description": "Total rows examined across all statement digests. High values indicate inefficient queries or missing indexes.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 9
+          },
+          "id": 217,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_perf_schema_digest_rows_examined_total{job=\"$job\", instance=\"$instance\"}",
+              "legendFormat": "Rows Examined",
+              "refId": "A"
+            }
+          ],
+          "title": "Rows Examined",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Total rows sent to clients across all statement digests",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 9
+          },
+          "id": 218,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_perf_schema_digest_rows_sent_total{job=\"$job\", instance=\"$instance\"}",
+              "legendFormat": "Rows Sent",
+              "refId": "A"
+            }
+          ],
+          "title": "Rows Sent",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Cumulative latency across all statement digests in seconds",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 17
+          },
+          "id": 219,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_perf_schema_digest_latency_seconds_total{job=\"$job\", instance=\"$instance\"}",
+              "legendFormat": "Total Latency",
+              "refId": "A"
+            }
+          ],
+          "title": "Total Statement Latency",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Top 5 statement digests by total execution time. Use this to identify slow queries.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 17
+          },
+          "id": 220,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_perf_schema_digest_latency_seconds_total{job=\"$job\", instance=\"$instance\"}",
+              "legendFormat": "{{schema}}.{{digest}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Top Statement Digests by Latency",
+          "type": "timeseries"
         }
       ],
-      "title": "Time Since Last Scrape",
-      "type": "timeseries"
+      "title": "Statement Performance (requires --collector.statements)",
+      "type": "row"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "**Goal**: Monitor metric cardinality\n**Action**: Sudden increases may indicate label explosion",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
+      "collapsed": true,
       "gridPos": {
-        "h": 4,
-        "w": 8,
+        "h": 1,
+        "w": 24,
         "x": 0,
-        "y": 190
+        "y": 332
       },
-      "id": 64,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "textMode": "auto"
-      },
-      "targets": [
+      "id": 71,
+      "panels": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_exporter_metrics_total{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "description": "Approximate table sizes in bytes (data + index) for the 20 largest tables",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 1
+          },
+          "id": 207,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_info_schema_table_size_bytes{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "{{schema}}.{{table}}"
+            }
+          ],
+          "title": "Top Tables by Size",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Approximate row count estimates for tracked tables",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 1
+          },
+          "id": 208,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_info_schema_table_rows{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "{{schema}}.{{table}}"
+            }
+          ],
+          "title": "Table Row Counts",
+          "type": "timeseries"
         }
       ],
-      "title": "Total Metrics Exported",
-      "type": "stat"
+      "title": "Schema Information (requires --collector.schema)",
+      "type": "row"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 333
       },
-      "description": "**Goal**: Track exporter restarts\n**Action**: Frequent restarts indicate stability issues",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
+      "id": 72,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
+          "description": "Total size of relay logs on replica (bytes)",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 1
+          },
+          "id": 209,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_replica_relay_log_space_bytes{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "Relay Log Space (bytes)"
+            }
+          ],
+          "title": "Relay Log Space",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Number of binary log files on the primary server",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 1
+          },
+          "id": 210,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_primary_binlog_files{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "Binlog Files"
+            }
+          ],
+          "title": "Primary Binlog Files",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Current position in the relay log. Tracks replication progress on replica servers.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 1
+          },
+          "id": 221,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_replica_relay_log_pos{job=\"$job\", instance=\"$instance\"}",
+              "legendFormat": "Relay Log Position",
+              "refId": "A"
+            }
+          ],
+          "title": "Relay Log Position",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Replication Status (requires --collector.replication)",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 334
+      },
+      "id": 73,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Current number of metadata locks from performance_schema",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 1
+          },
+          "id": 211,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_perf_schema_metadata_lock_count{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A"
+            }
+          ],
+          "title": "Metadata Lock Count",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Total table lock waits from performance_schema",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 1
+          },
+          "id": 212,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_perf_schema_table_lock_waits{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A"
+            }
+          ],
+          "title": "Table Lock Waits",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Locks & Blocking (requires --collector.locks)",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 335
+      },
+      "id": 74,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Count of metadata locks grouped by mode and type (requires metadata_lock_info plugin). **Note**: Panel shows 'No data' when no locks exist - this is normal and indicates healthy operation.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 1
+          },
+          "id": 213,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_metadata_lock_info_count{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "{{mode}} - {{type}}"
+            }
+          ],
+          "title": "Metadata Lock Info Count",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Metadata Lock Statistics (requires --collector.metadata)",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 336
+      },
+      "id": 75,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Total connections per user from information_schema.USER_STATISTICS",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 1
+          },
+          "id": 215,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_info_schema_userstats_connections_total{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "{{user}}"
+            }
+          ],
+          "title": "Connections by User",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Total bytes sent and received per user",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 16,
+            "x": 8,
+            "y": 1
+          },
+          "id": 216,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "rate(mariadb_info_schema_userstats_bytes_sent_total{job=\"$job\", instance=\"$instance\"}[$__rate_interval])",
+              "refId": "A",
+              "legendFormat": "{{user}} sent"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "rate(mariadb_info_schema_userstats_bytes_received_total{job=\"$job\", instance=\"$instance\"}[$__rate_interval])",
+              "refId": "B",
+              "legendFormat": "{{user}} received"
+            }
+          ],
+          "title": "Bytes Traffic by User",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Total rows read and sent per user",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 9
+          },
+          "id": 223,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "rate(mariadb_info_schema_userstats_rows_read_total{job=\"$job\", instance=\"$instance\"}[$__rate_interval])",
+              "refId": "A",
+              "legendFormat": "{{user}} read"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "rate(mariadb_info_schema_userstats_rows_sent_total{job=\"$job\", instance=\"$instance\"}[$__rate_interval])",
+              "refId": "B",
+              "legendFormat": "{{user}} sent"
+            }
+          ],
+          "title": "Rows Read/Sent by User",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Row modifications per user (delete, insert, update)",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 9
+          },
+          "id": 225,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "rate(mariadb_info_schema_userstats_rows_deleted_total{job=\"$job\", instance=\"$instance\"}[$__rate_interval])",
+              "refId": "A",
+              "legendFormat": "{{user}} deleted"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "rate(mariadb_info_schema_userstats_rows_inserted_total{job=\"$job\", instance=\"$instance\"}[$__rate_interval])",
+              "refId": "B",
+              "legendFormat": "{{user}} inserted"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "rate(mariadb_info_schema_userstats_rows_updated_total{job=\"$job\", instance=\"$instance\"}[$__rate_interval])",
+              "refId": "C",
+              "legendFormat": "{{user}} updated"
+            }
+          ],
+          "title": "Row Operations by User",
+          "type": "timeseries"
+        }
+      ],
+      "title": "User Statistics (requires --collector.userstat)",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 337
+      },
+      "id": 200,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "CPU usage of mariadb_exporter process.\n\n**Per-Core %** (Left Y-Axis, solid line):\n- Actual CPU usage (matches ps, top, pidstat)\n- Can exceed 100% on multi-core systems\n- Example: 124% = using 1.24 cores worth of CPU\n\n**Normalized %** (Right Y-Axis, dashed line):\n- Per-core average (cpu_percent / cpu_cores)\n- Always 0-100% range\n- Shows average CPU load per core\n- Example: 124% / 24 cores = 5.17% per-core\n\n**Typical values (per-core %):**\n- Idle: 1-5%\n- Light load: 5-15%\n- Moderate: 15-30%\n- Heavy: 30-50%\n\n**Note:** First reading after startup will be 0% (sysinfo needs 2 refreshes for accuracy).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "CPU %",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percent",
+              "decimals": 2
+            },
+            "overrides": [
               {
-                "color": "green",
-                "value": null
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total % (normalized)"
+                },
+                "properties": [
+                  {
+                    "id": "custom.axisPlacement",
+                    "value": "right"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "semi-dark-blue"
+                    }
+                  }
+                ]
               }
             ]
           },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 8,
-        "y": 190
-      },
-      "id": 65,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 1
+          },
+          "id": 201,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_exporter_process_cpu_percent{job=\"$job\", instance=\"$instance\"}",
+              "legendFormat": "Per-Core % (can exceed 100%)",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_exporter_process_cpu_percent{job=\"$job\", instance=\"$instance\"} / mariadb_exporter_process_cpu_cores{job=\"$job\", instance=\"$instance\"}",
+              "legendFormat": "Normalized % (per-core average)",
+              "refId": "B"
+            }
           ],
-          "fields": ""
+          "title": "Exporter Process CPU Usage",
+          "type": "timeseries"
         },
-        "textMode": "auto"
-      },
-      "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "time() - mariadb_exporter_process_start_time_seconds{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
-        }
-      ],
-      "title": "Exporter Uptime",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "**Goal**: Identify exporter version\n**Action**: Keep updated for latest features and fixes",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
+          "description": "Memory usage of the mariadb_exporter process.\n\n**RSS (Resident Set Size):** Actual physical RAM used by the process\n- What's counted: Code, stack, heap, shared libraries actively in RAM\n- This is the \"real\" memory usage you care about\n\n**VSZ (Virtual Size):** Total virtual memory allocated\n- Includes: RSS + swapped memory + memory-mapped files + shared libraries\n- Usually 2-10x larger than RSS (this is normal!)\n- Example: RSS=45MB, VSZ=500MB is typical\n\n**GOAL:** Stable RSS over time (no memory leaks)\n\n**ACTIONS IF RSS INCREASING:**\n1. Check for memory leaks in exporter\n2. Reduce number of collectors or databases monitored\n3. Check metric cardinality explosion (see Total Metrics panel)\n4. Review connection pool settings\n\n**NOTE:** VSZ growth is usually harmless - focus on RSS trends",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 524288000
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
           },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 1
+          },
+          "id": 202,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_exporter_process_resident_memory_bytes{job=\"$job\", instance=\"$instance\"}",
+              "legendFormat": "RSS",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_exporter_process_virtual_memory_bytes{job=\"$job\", instance=\"$instance\"}",
+              "legendFormat": "VSZ",
+              "refId": "B"
+            }
+          ],
+          "title": "Exporter Memory Usage",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Number of open file descriptors.\n\nGOAL: Stay well below system limit (usually 1024 or ulimit -n)\n\nWARNING: If this approaches the limit, the exporter will fail with 'too many open files'\n\nACTIONS IF HIGH:\n1. Check for file descriptor leaks\n2. Increase ulimit if needed\n3. Review database connection pooling",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 512
+                  },
+                  {
+                    "color": "red",
+                    "value": 900
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 1
+          },
+          "id": 2004,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_exporter_process_open_fds{job=\"$job\", instance=\"$instance\"}",
+              "legendFormat": "Open FDs",
+              "refId": "A"
+            }
+          ],
+          "title": "Open File Descriptors",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Collector health timeline showing scrape status over time.\n\n**GREEN** = Scraping successfully\n**RED** = Failed scrape\n\n**LEGEND SHOWS:**\n- Collector name\n- Current status (hover for details)\n\n**WHAT TO LOOK FOR:**\n- Red bars = Failed scrapes (check logs immediately)\n- Gaps = Collector not running/enabled\n- Flapping (red/green/red) = Intermittent issues\n\n**ACTIONS IF RED:**\n1. Check mariadb_exporter logs for error details\n2. Verify database connectivity and permissions\n3. Check required extensions (pg_stat_statements, etc.)\n4. Review collector-specific requirements\n\n**TIP:** Pair with 'Collector Scrape Duration' panel on right to see if slow collectors correlate with failures",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "fillOpacity": 70,
+                "lineWidth": 0,
+                "spanNulls": false
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "0": {
+                      "color": "red",
+                      "index": 0,
+                      "text": "FAILED"
+                    },
+                    "1": {
+                      "color": "green",
+                      "index": 1,
+                      "text": "OK"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
               }
-            ]
+            },
+            "overrides": []
           },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 16,
-        "y": 190
-      },
-      "id": 66,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 9
+          },
+          "id": 2003,
+          "options": {
+            "alignValue": "left",
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "mergeValues": true,
+            "rowHeight": 0.9,
+            "showValue": "always",
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_exporter_collector_last_scrape_success{job=\"$job\", instance=\"$instance\"}",
+              "legendFormat": "{{collector}}",
+              "refId": "A"
+            }
           ],
-          "fields": ""
+          "title": "Collector Health Timeline",
+          "type": "state-timeline"
         },
-        "textMode": "auto"
-      },
-      "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_exporter_build_info{job=\"$job\", instance=~\"$instance\"}",
-          "refId": "A"
+          "description": "Time spent collecting metrics from PostgreSQL per collector.\n\nGOAL: < 1 second per collector\n\nUse to identify slow collectors.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 12,
+            "w": 12,
+            "x": 12,
+            "y": 9
+          },
+          "id": 204,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "min",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "rate(mariadb_exporter_collector_scrape_duration_seconds_sum{job=\"$job\", instance=\"$instance\"}[5m]) / rate(mariadb_exporter_collector_scrape_duration_seconds_count{job=\"$job\", instance=\"$instance\"}[5m])",
+              "legendFormat": "{{collector}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Collector Scrape Duration",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Time elapsed since each collector last successfully scraped.\n\n**GOAL:** < 60 seconds (should match scrape interval)\n\n**GREEN:** Recent scrape (< 60s)\n**YELLOW:** Delayed (60-120s)\n**RED:** Stale/stuck (> 120s)\n\n**SHOWS:**\n- Which collectors are running on schedule\n- Which collectors are stuck/stale\n- How long since last successful collection\n\n**ACTIONS IF HIGH:**\n1. Check if collector is enabled\n2. Look for errors in Health Timeline above\n3. Check Scrape Duration on right for slow collectors\n4. Review mariadb_exporter logs",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 300,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 60
+                  },
+                  {
+                    "color": "orange",
+                    "value": 120
+                  },
+                  {
+                    "color": "red",
+                    "value": 180
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 0,
+            "y": 17
+          },
+          "id": 1011,
+          "options": {
+            "displayMode": "gradient",
+            "minVizWidth": 0,
+            "minVizHeight": 10,
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "showUnfilled": true,
+            "text": {
+              "valueSize": 14
+            }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "time() - mariadb_exporter_collector_last_scrape_timestamp_seconds{job=\"$job\", instance=\"$instance\"}",
+              "legendFormat": "{{collector}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Time Since Last Scrape",
+          "type": "bargauge"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Total number of metrics currently exported by mariadb_exporter.\n\nGOAL: Keep cardinality under your monitoring platform limits\n- Cortex/Mimir: Often have strict series limits\n- Prometheus: High cardinality = high memory usage\n\nACTIONS IF TOO HIGH:\n1. Disable unnecessary collectors\n2. Filter databases (use PG_EXPORTER_EXCLUDE_DATABASES)\n3. Review metric labels for high cardinality\n4. Check for label explosion (many tables/databases)",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 5000
+                  },
+                  {
+                    "color": "red",
+                    "value": 10000
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 21
+          },
+          "id": 203,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "textMode": "value"
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_exporter_metrics_total{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A"
+            }
+          ],
+          "title": "Total Metrics Exported",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "Time since mariadb_exporter process started.\n\nShows when the exporter was last restarted.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 8,
+            "y": 21
+          },
+          "id": 2001,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "textMode": "value"
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "time() - mariadb_exporter_process_start_time_seconds{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A"
+            }
+          ],
+          "title": "Uptime",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "mariadb_exporter version currently running",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 21
+          },
+          "id": 2002,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "/^version$/"
+            },
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_exporter_build_info{instance=~\"$instance\"}",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Exporter Version",
+          "type": "stat",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "instance": true,
+                  "job": true
+                },
+                "indexByName": {},
+                "renameByName": {}
+              }
+            }
+          ]
         }
       ],
-      "title": "Exporter Version",
-      "type": "stat"
+      "title": "Exporter Self-Monitoring",
+      "type": "row",
+      "description": "Monitor mariadb_exporter's own performance and health. Enable with --collector.exporter flag."
     }
   ],
   "refresh": "30s",
