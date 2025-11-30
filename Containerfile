@@ -3,11 +3,8 @@ FROM rust:1-alpine AS builder
 
 ARG TARGETPLATFORM
 
-# Install build dependencies
-RUN apk add --no-cache \
-    musl-dev \
-    openssl-dev \
-    openssl-libs-static
+# Install build dependencies (rustls only, no OpenSSL needed)
+RUN apk add --no-cache musl-dev
 
 WORKDIR /build
 
