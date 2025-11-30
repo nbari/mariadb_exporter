@@ -7,14 +7,12 @@
 
 MariaDB metrics exporter for Prometheus written in Rust.
 
-## Goals
+## Features
 
-`mariadb_exporter` focuses on DBRE-friendly, selective metrics:
-
-* **Modular collectors** – Enable only what you need; heavy/optional plugins stay off by default.
+* **Modular collectors** – Enable only what you need; heavy/optional collectors stay off by default.
 * **Compatibility** – Metric names align with Prometheus `mysqld_exporter` (prefixed `mariadb_`).
-* **Lean defaults** – Useful availability/innodb/replication basics on by default; optional collectors gated.
-* **Low footprint** – Avoid unnecessary cardinality and expensive scans.
+* **Lean defaults** – Essential availability, InnoDB, and replication metrics enabled by default; optional collectors opt-in.
+* **Low footprint** – Designed to minimize cardinality and avoid expensive scans.
 
 ## Download or build
 
@@ -94,11 +92,10 @@ mariadb_exporter --dsn "..." --port 9187
 
 Collectors are toggled with `--collector.<name>` or `--no-collector.<name>`.
 
-* `--collector.default` (enabled) – Core status (uptime, threads, connections, traffic), InnoDB basics, replication basics, binlog stats, config flags, version, `mariadb_up`.
+* `--collector.default` (enabled) – Core status (uptime, threads, connections, traffic), InnoDB basics, replication basics, binlog stats, config flags, version, `mariadb_up`, audit log enabled status.
 * `--collector.exporter` (enabled) – Exporter self-metrics (process, scrape, cardinality).
 * `--collector.tls` – TLS session + cipher info.
 * `--collector.query_response_time` – Buckets from `query_response_time` plugin.
-* `--collector.audit` – Audit plugin status.
 * `--collector.statements` – Statement digest summaries/top latency from `performance_schema`.
 * `--collector.schema` – Table size/row estimates (largest 20 non-system tables).
 * `--collector.replication` – Relay log size/pos, binlog file count.
@@ -120,7 +117,6 @@ mariadb_exporter
 ├── bin
 ├── cli
 ├── collectors
-│   ├── audit
 │   ├── config.rs
 │   ├── default
 │   ├── exporter
