@@ -492,6 +492,31 @@ validate-all: test validate-dashboard
 build-image:
   podman build -t mariadb_exporter:latest -f Containerfile .
 
+# Test multi-arch container build (like GitHub Actions, without pushing)
+test-container-build:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  
+  VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+  echo "🐳 Testing container build for version ${VERSION}"
+  
+  # Build for native platform only (for local testing without QEMU)
+  # CI/CD will build multi-arch with --platform linux/amd64,linux/arm64
+  podman build \
+    -t mariadb_exporter:test-${VERSION} \
+    -f Containerfile \
+    .
+  
+  echo "✅ Container build successful!"
+  echo "Test with: podman run --rm mariadb_exporter:test-${VERSION} --version"
+  echo "📦 Manifest: mariadb_exporter:test-${VERSION}"
+  echo ""
+  echo "🔍 To inspect:"
+  echo "   podman manifest inspect mariadb_exporter:test-${VERSION}"
+  echo ""
+  echo "🧹 To clean up:"
+  echo "   podman manifest rm mariadb_exporter:test-${VERSION}"
+
 # Build combined MariaDB + exporter image (realistic socket testing)
 build-image-combined:
   podman build -t mariadb_exporter:combined -f Containerfile.mariadb .
