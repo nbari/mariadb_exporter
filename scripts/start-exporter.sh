@@ -5,7 +5,7 @@ set -euo pipefail
 # Wait for MariaDB to be ready
 echo "Waiting for MariaDB to be ready..."
 timeout 30 bash -c '
-  until mysqladmin ping -h localhost --silent 2>/dev/null; do
+  until mariadb-admin ping -h localhost --silent 2>/dev/null; do
     sleep 1
   done
 ' || {

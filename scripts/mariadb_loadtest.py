@@ -25,6 +25,7 @@ Workloads:
     stress              - Heavy load, slow queries, complex operations
     metadata            - DDL operations, metadata locks
     connection_exhaustion - Max connections testing
+    query_response_time - Tests all histogram buckets (100ms-1s, 1s-10s, >10s)
     all_metrics         - Comprehensive coverage of ALL collectors
 
 Environment Variables:
@@ -119,9 +120,9 @@ Examples:
     workload = p.add_argument_group('Workload')
     workload.add_argument(
         "--workload",
-        choices=["basic", "mixed", "stress", "metadata", "connection_exhaustion", "all_metrics"],
+        choices=["basic", "mixed", "stress", "metadata", "connection_exhaustion", "query_response_time", "all_metrics"],
         default=os.getenv("LT_WORKLOAD", "mixed"),
-        help="Workload type (default: mixed). Use 'all_metrics' for comprehensive collector testing."
+        help="Workload type (default: mixed). Use 'query_response_time' to test histogram buckets, 'all_metrics' for comprehensive testing."
     )
     workload.add_argument("--workers", type=int, default=int(os.getenv("LT_WORKERS", "50")),
                          help="Number of concurrent workers (default: 50, auto-adjusts to 200 for connection_exhaustion)")
@@ -464,24 +465,92 @@ def workload_connection_exhaustion(cur: mariadb.Cursor, conn: mariadb.Connection
         time.sleep(1)
 
 
+def workload_query_response_time(cur: mariadb.Cursor, conn: mariadb.Connection, cfg: Config) -> None:
+    """
+    Query response time workload: generates queries in all histogram buckets.
+
+    Bucket coverage:
+    - le="0.1": Queries 100ms-1s (200ms, 500ms, 800ms)
+    - le="1.0": Queries 1s-10s (2s, 5s)
+    - le="10.0": Queries >10s (12s)
+    - Fast queries <100ms (not in buckets, but in _count and _sum)
+    """
+    # Enable query_response_time if needed
+    try:
+        cur.execute("SET GLOBAL query_response_time_stats = ON")
+    except Exception:
+        pass  # May not have permission or plugin not available
+
+    # Fast queries (< 100ms) - appear in _count and _sum but not buckets
+    for _ in range(3):
+        cur.execute("SELECT 1")
+        _ = cur.fetchone()
+        cur.execute("SELECT ? + ?", (random.randint(1, 100), random.randint(1, 100)))
+        _ = cur.fetchone()
+
+    # Bucket le="0.1" (100ms-1s)
+    cur.execute("SELECT SLEEP(0.2)")  # 200ms
+    _ = cur.fetchone()
+
+    cur.execute("SELECT SLEEP(0.5)")  # 500ms
+    _ = cur.fetchone()
+
+    cur.execute("SELECT SLEEP(0.8)")  # 800ms
+    _ = cur.fetchone()
+
+    # Bucket le="1.0" (1s-10s)
+    cur.execute("SELECT SLEEP(2)")  # 2s
+    _ = cur.fetchone()
+
+    if random.random() < 0.5:  # 50% chance for 5s query
+        cur.execute("SELECT SLEEP(5)")  # 5s
+        _ = cur.fetchone()
+
+    # Bucket le="10.0" (>10s) - less frequent to avoid excessive slowness
+    if random.random() < 0.2:  # 20% chance for very slow query
+        cur.execute("SELECT SLEEP(12)")  # 12s
+        _ = cur.fetchone()
+
+    # Some data manipulation to make it realistic
+    payload = rand_payload(32)
+    cur.execute("INSERT INTO test_load (payload, status) VALUES (?, 'test')", (payload,))
+
+    if not cfg.autocommit:
+        try:
+            conn.commit()
+        except mariadb.OperationalError:
+            conn.rollback()
+
+
 def workload_all_metrics(cur: mariadb.Cursor, conn: mariadb.Connection, cfg: Config) -> None:
     """
     Comprehensive workload that exercises ALL metrics from all collectors.
 
     Metrics coverage:
     - default: connections, queries, com_*, table_locks, InnoDB buffer pool, slow queries
-    - query_response_time: fast, medium, and slow queries
+    - query_response_time: fast, medium, and slow queries across all buckets
     - statements: varied statement types (performance_schema)
     - schema: table data and row inserts
     - locks: table locks and metadata locks
     - metadata: long transactions with DDL
     """
-    # === PART 1: Fast queries (query_response_time: < 0.01s) ===
-    cur.execute("SELECT 1")
-    _ = cur.fetchone()
+    # === PART 1: Query response time bucket testing ===
+    # Fast queries (< 100ms) - appear in _count/_sum but not buckets
+    for _ in range(2):
+        cur.execute("SELECT 1")
+        _ = cur.fetchone()
 
     cur.execute("SELECT ? + ?", (random.randint(1, 100), random.randint(1, 100)))
     _ = cur.fetchone()
+
+    # Medium query: le="0.1" bucket (100ms-1s)
+    cur.execute("SELECT SLEEP(0.3)")  # 300ms
+    _ = cur.fetchone()
+
+    # Slow query: le="1.0" bucket (1s-10s) - 30% chance
+    if random.random() < 0.3:
+        cur.execute("SELECT SLEEP(2)")  # 2s
+        _ = cur.fetchone()
 
     # === PART 2: Data manipulation (com_insert, com_update, com_delete, schema) ===
     # INSERT - exercises: com_insert, table rows, table size (no contention)
@@ -594,6 +663,7 @@ WORKLOADS: dict[str, Callable] = {
     "stress": workload_stress,
     "metadata": workload_metadata,
     "connection_exhaustion": workload_connection_exhaustion,
+    "query_response_time": workload_query_response_time,  # Tests all histogram buckets
     "all_metrics": workload_all_metrics,  # Comprehensive coverage
 }
 

@@ -40,38 +40,36 @@ RUN . /tmp/rust_target.env && \
     mkdir -p /build/output && \
     cp "/build/target/$RUST_TARGET/release/mariadb_exporter" /build/output/
 
-# Runtime stage
-FROM alpine:latest
-
-# Install runtime dependencies
-RUN apk add --no-cache \
-    ca-certificates \
-    mariadb-client
-
-# Create non-root user
-RUN addgroup -g 10001 exporter && \
-    adduser -D -u 10001 -G exporter exporter
-
-WORKDIR /app
+# Runtime stage - using distroless for minimal attack surface
+# Distroless images contain only your application and runtime dependencies
+# No shell, package manager, or other unnecessary tools
+FROM gcr.io/distroless/static-debian12:nonroot
 
 # Copy binary from builder
-COPY --from=builder /build/output/mariadb_exporter /usr/local/bin/mariadb_exporter
+COPY --from=builder --chmod=755 /build/output/mariadb_exporter /usr/local/bin/mariadb_exporter
 
-# Make binary executable
-RUN chmod +x /usr/local/bin/mariadb_exporter
+# Default environment variables
+# Note: Override MARIADB_EXPORTER_DSN to point to your actual MariaDB instance
+ENV MARIADB_EXPORTER_PORT="9306"
 
-# Switch to non-root user
-USER exporter
+# Optional TLS/SSL configuration (uncomment and set as needed):
+# ENV MARIADB_EXPORTER_TLS_CERT="/app/certs/cert.pem"
+# ENV MARIADB_EXPORTER_TLS_KEY="/app/certs/key.pem"
+# ENV MARIADB_EXPORTER_LISTEN="0.0.0.0"
 
-# Default port
+# Optional: Exclude specific databases from monitoring
+# ENV MARIADB_EXPORTER_EXCLUDE_DATABASES="information_schema,performance_schema,mysql"
+
+# Optional: Custom server label for metrics
+# ENV MARIADB_EXPORTER_SERVER_LABEL="production-db-01"
+
+# Default port (can be overridden with MARIADB_EXPORTER_PORT)
 EXPOSE 9306
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:9306/health || exit 1
-
-# Default command - using socket connection
-# Override with podman run -e MARIADB_EXPORTER_DSN="..."
-ENV MARIADB_EXPORTER_DSN="mysql:///mysql?socket=/var/run/mysqld/mysqld.sock&user=exporter"
+# Note: No built-in HEALTHCHECK in distroless images (no shell/wget/curl)
+# Use external health checks instead:
+# - Kubernetes: livenessProbe/readinessProbe with httpGet on /health
+# - Docker Compose: healthcheck with wget/curl from host
+# - Prometheus: Scraping /metrics already monitors availability
 
 ENTRYPOINT ["/usr/local/bin/mariadb_exporter"]

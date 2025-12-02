@@ -10,7 +10,7 @@ PASS="${MARIADB_PASS:-root}"
 echo "📊 Setting up test database..."
 
 # Wait for MariaDB to be ready
-timeout 30 bash -c "until mysqladmin ping -h ${HOST} -P ${PORT} -u${USER} -p${PASS} --silent 2>/dev/null; do sleep 1; done" || {
+timeout 30 bash -c "until mariadb-admin ping -h ${HOST} -P ${PORT} -u${USER} -p${PASS} --silent 2>/dev/null; do sleep 1; done" || {
     echo "❌ MariaDB not responding on ${HOST}:${PORT}"
     exit 1
 }

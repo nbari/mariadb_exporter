@@ -13,7 +13,7 @@ test: clippy fmt
     just mariadb; \
     echo "⏳ Waiting for MariaDB to be ready..."; \
     sleep 3; \
-    timeout 30 bash -c 'until podman exec mariadb_exporter_db mysqladmin ping -h "127.0.0.1" -proot --silent; do sleep 1; done' || (echo "❌ MariaDB failed to start" && exit 1); \
+    timeout 30 bash -c 'until podman exec mariadb_exporter_db mariadb-admin ping -h "127.0.0.1" -proot --silent; do sleep 1; done' || (echo "❌ MariaDB failed to start" && exit 1); \
     echo "✅ MariaDB is ready"; \
   else \
     echo "✅ MariaDB container is already running"; \
@@ -261,14 +261,14 @@ t-deploy message="CI test": check-develop check-clean test
 
 # Watch for changes and run
 watch:
-  cargo watch -x 'run -- --collector.default --collector.exporter --collector.tls --collector.query_response_time --collector.statements --collector.schema --collector.replication --collector.locks --collector.metadata --collector.userstat -v'
+  cargo watch -x 'run -- --collector.default --collector.exporter --collector.tls --collector.query_response_time --collector.statements --collector.schema --collector.replication --collector.locks --collector.metadata --collector.userstat --collector.innodb -v'
 
 # get metrics curl
 curl:
   curl -s 0:9306/metrics
 
 mariadb version="11.4":
-  mkdir -p db/data
+  mkdir -p db/data db/conf
   podman run --rm -d --name mariadb_exporter_db \
     -e MARIADB_ROOT_PASSWORD=root \
     -e MARIADB_ROOT_HOST=% \
@@ -276,14 +276,12 @@ mariadb version="11.4":
     -p 3306:3306 \
     -v ${PWD}/db/conf:/etc/mysql/conf.d:Z \
     -v ${PWD}/db/data:/var/lib/mysql:Z \
-    --health-cmd="mysqladmin ping -h 127.0.0.1 -proot --silent" \
+    --health-cmd="mariadb-admin ping -h 127.0.0.1 -proot --silent" \
     --health-interval=10s \
     --health-timeout=5s \
     --health-retries=5 \
     --userns keep-id:uid={{ uid }},gid={{ gid }} \
     --user {{ uid }}:{{ gid }} \
-    --userns keep-id:uid=999,gid=999 \
-    --user 999:999 \
     mariadb:{{ version }}
 
 jaeger:
@@ -327,7 +325,7 @@ test-all-mariadb:
 
     for v in "${VERSIONS[@]}"; do
         NAME="mariadb${v//./}"
-        timeout 30 bash -c "until podman exec ${NAME} mysqladmin ping -h 127.0.0.1 -proot --silent >/dev/null 2>&1; do sleep 1; done" || true
+        timeout 30 bash -c "until podman exec ${NAME} mariadb-admin ping -h 127.0.0.1 -proot --silent >/dev/null 2>&1; do sleep 1; done" || true
     done
 
     echo ""
@@ -386,7 +384,7 @@ test-mariadb version:
 
     echo "⏳ Waiting for MariaDB to be ready..."
     sleep 3
-    timeout 30 bash -c "until podman exec mariadb${PORT_SUFFIX} mysqladmin ping -h 127.0.0.1 -proot --silent >/dev/null 2>&1; do sleep 1; done"
+    timeout 30 bash -c "until podman exec mariadb${PORT_SUFFIX} mariadb-admin ping -h 127.0.0.1 -proot --silent >/dev/null 2>&1; do sleep 1; done"
 
     echo "🧪 Running tests..."
     MARIADB_EXPORTER_DSN="mysql://root:root@127.0.0.1:${PORT}/mysql" cargo test
@@ -496,17 +494,17 @@ build-image:
 test-container-build:
   #!/usr/bin/env bash
   set -euo pipefail
-  
+
   VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
   echo "🐳 Testing container build for version ${VERSION}"
-  
+
   # Build for native platform only (for local testing without QEMU)
   # CI/CD will build multi-arch with --platform linux/amd64,linux/arm64
   podman build \
     -t mariadb_exporter:test-${VERSION} \
     -f Containerfile \
     .
-  
+
   echo "✅ Container build successful!"
   echo "Test with: podman run --rm mariadb_exporter:test-${VERSION} --version"
   echo "📦 Manifest: mariadb_exporter:test-${VERSION}"
@@ -543,7 +541,7 @@ test-socket:
 
   # Wait for MariaDB
   timeout 30 bash -c '
-    until podman exec mariadb_socket_test mysqladmin ping -h localhost --silent 2>/dev/null; do
+    until podman exec mariadb_socket_test mariadb-admin ping -h localhost --silent 2>/dev/null; do
       sleep 1
     done
   ' || {

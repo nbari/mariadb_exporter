@@ -1,5 +1,6 @@
 pub mod common;
 pub mod default;
+pub mod innodb;
 pub mod locks;
 pub mod metadata;
 pub mod query_response_time;

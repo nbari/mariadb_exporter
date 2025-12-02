@@ -59,6 +59,7 @@ register_collectors! {
     locks => LocksCollector,
     metadata => MetadataCollector,
     userstat => UserStatCollector,
+    innodb => InnodbCollector,
     // Add more collectors here - just follow the same pattern!
 }
 

@@ -221,17 +221,26 @@ impl CollectorRegistry {
         let mut buffer = Vec::new();
         encoder.encode(&metric_families, &mut buffer)?;
 
-        // Update metrics count for next scrape based on actual output
-        // This matches: curl /metrics | grep -v '^#' | grep -v '^$' | wc -l
-        // Note: The count will be visible in the NEXT scrape (eventual consistency)
+        // Update metrics count for next scrape
+        // Count actual time series lines (non-comment, non-empty lines)
+        // This matches: curl -s 0:9306/metrics | grep -vEc '^(#|\s*$)'
+        // Note: This count will be visible in the NEXT scrape (eventual consistency)
         if let Some(ref scraper) = self.scraper {
-            let output = String::from_utf8_lossy(&buffer);
-            let sample_count: i64 = output
+            // Prefer zero-copy UTF-8, fall back to lossy for robustness
+            let output = match std::str::from_utf8(&buffer) {
+                Ok(s) => std::borrow::Cow::Borrowed(s),
+                Err(_) => std::borrow::Cow::Owned(String::from_utf8_lossy(&buffer).into_owned()),
+            };
+
+            let count = output
                 .lines()
-                .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
-                .count()
-                .try_into()
-                .unwrap_or(0);
+                // Ignore comment lines (Prometheus-spec: '#' at column 0)
+                .filter(|line| !line.starts_with('#'))
+                // Ignore whitespace-only lines
+                .filter(|line| !line.trim().is_empty())
+                .count();
+
+            let sample_count = i64::try_from(count).unwrap_or(0);
 
             scraper.update_metrics_count(sample_count);
         }
