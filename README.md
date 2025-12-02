@@ -107,6 +107,55 @@ Collectors are toggled with `--collector.<name>` or `--no-collector.<name>`.
 
 Everything else is opt-in.
 
+### Enable all collectors
+
+To enable **all collectors** for maximum visibility:
+
+```bash
+mariadb_exporter \
+  --dsn "mysql:///mysql?socket=/var/run/mysqld/mysqld.sock&user=exporter" \
+  --collector.default \
+  --collector.exporter \
+  --collector.innodb \
+  --collector.tls \
+  --collector.query_response_time \
+  --collector.statements \
+  --collector.schema \
+  --collector.replication \
+  --collector.locks \
+  --collector.metadata \
+  --collector.userstat
+```
+
+Or using environment variables:
+
+```bash
+export MARIADB_EXPORTER_DSN="mysql:///mysql?socket=/var/run/mysqld/mysqld.sock&user=exporter"
+export MARIADB_EXPORTER_PORT="9306"
+
+mariadb_exporter \
+  --collector.default \
+  --collector.exporter \
+  --collector.innodb \
+  --collector.tls \
+  --collector.query_response_time \
+  --collector.statements \
+  --collector.schema \
+  --collector.replication \
+  --collector.locks \
+  --collector.metadata \
+  --collector.userstat
+```
+
+**Note:** Some collectors require additional privileges or database configuration:
+- `innodb` – Requires `PROCESS` privilege (included in recommended setup)
+- `tls` – Only shows data if TLS/SSL is enabled
+- `query_response_time` – Requires `query_response_time` plugin enabled
+- `statements` – Requires `performance_schema` enabled
+- `schema` – Queries `information_schema` (can be slow on large databases)
+- `locks`, `metadata` – Require `performance_schema` enabled
+- `userstat` – Requires `@@userstat=1` and `USER_STATISTICS` enabled
+
 ### InnoDB Advanced Metrics
 
 The `--collector.innodb` provides deep visibility into InnoDB internals by parsing `SHOW ENGINE INNODB STATUS`:
