@@ -90,6 +90,7 @@ Collectors are toggled with `--collector.<name>` or `--no-collector.<name>`.
 
 * `--collector.default` (enabled) – Core status (uptime, threads, connections, traffic), InnoDB basics, replication basics, binlog stats, config flags, version, `mariadb_up`, audit log enabled status.
 * `--collector.exporter` (enabled) – Exporter self-metrics (process, scrape, cardinality).
+* `--collector.innodb` – Advanced InnoDB metrics from `SHOW ENGINE INNODB STATUS`: LSN tracking, checkpoint age, active transactions, semaphore waits, adaptive hash index stats.
 * `--collector.tls` – TLS session + cipher info.
 * `--collector.query_response_time` – Buckets from `query_response_time` plugin.
 * `--collector.statements` – Statement digest summaries/top latency from `performance_schema`.
@@ -106,6 +107,36 @@ Collectors are toggled with `--collector.<name>` or `--no-collector.<name>`.
 
 Everything else is opt-in.
 
+### InnoDB Advanced Metrics
+
+The `--collector.innodb` provides deep visibility into InnoDB internals by parsing `SHOW ENGINE INNODB STATUS`:
+
+**Metrics exposed:**
+* `mariadb_innodb_lsn_current` – Current log sequence number
+* `mariadb_innodb_lsn_flushed` – LSN flushed to disk
+* `mariadb_innodb_lsn_checkpoint` – Last checkpoint LSN
+* `mariadb_innodb_checkpoint_age_bytes` – Uncheckpointed bytes (LSN current - checkpoint)
+* `mariadb_innodb_active_transactions` – Count of active InnoDB transactions
+* `mariadb_innodb_semaphore_waits_total` – Semaphore wait events (internal contention)
+* `mariadb_innodb_semaphore_wait_time_ms_total` – Total semaphore wait time
+* `mariadb_innodb_adaptive_hash_searches_total` – Adaptive hash index hits
+* `mariadb_innodb_adaptive_hash_searches_btree_total` – AHI misses requiring B-tree lookup
+
+**Use cases:**
+* Monitor checkpoint age to prevent log file overflow
+* Track LSN progression for write workload analysis
+* Detect long-running transactions
+* Identify internal InnoDB contention (semaphore waits)
+* Measure adaptive hash index efficiency
+
+**Requirements:**
+* `PROCESS` privilege (for `SHOW ENGINE INNODB STATUS`)
+
+**Enable with:**
+```bash
+mariadb_exporter --collector.default --collector.innodb
+```
+
 ## Project layout
 
 ```
@@ -116,6 +147,7 @@ mariadb_exporter
 │   ├── config.rs
 │   ├── default
 │   ├── exporter
+│   ├── innodb
 │   ├── locks
 │   ├── metadata
 │   ├── mod.rs
