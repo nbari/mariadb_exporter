@@ -135,8 +135,9 @@ impl Collector for ReplicationCollector {
                     .set(relay_space.unwrap_or_default());
                 self.replica_relay_log_pos
                     .set(relay_pos.unwrap_or_default());
+                // Set to -1 when NULL (replication stopped/broken), otherwise use actual value
                 self.replica_seconds_behind_master
-                    .set(seconds_behind.unwrap_or_default());
+                    .set(seconds_behind.unwrap_or(-1));
 
                 // New health status metrics
                 let io_running: Option<String> = row.try_get("Slave_IO_Running").ok();
