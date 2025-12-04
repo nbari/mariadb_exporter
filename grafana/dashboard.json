@@ -1388,7 +1388,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 67
+        "y": 59
       },
       "id": 17,
       "options": {
@@ -1478,7 +1478,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 24,
         "x": 0,
         "y": 75
       },
@@ -1570,8 +1570,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 12,
+        "x": 0,
         "y": 83
       },
       "id": 19,
@@ -1662,9 +1662,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 91
+        "w": 12,
+        "x": 12,
+        "y": 83
       },
       "id": 20,
       "options": {
@@ -1703,7 +1703,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 99
+        "y": 107
       },
       "id": 21,
       "panels": [],
@@ -1769,7 +1769,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 100
+        "y": 108
       },
       "id": 22,
       "options": {
@@ -1900,7 +1900,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 116
+        "y": 124
       },
       "id": 24,
       "panels": [],
@@ -1966,7 +1966,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 117
+        "y": 125
       },
       "id": 25,
       "options": {
@@ -2058,7 +2058,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 125
+        "y": 133
       },
       "id": 26,
       "options": {
@@ -2150,7 +2150,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 133
+        "y": 141
       },
       "id": 27,
       "options": {
@@ -2189,7 +2189,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 141
+        "y": 149
       },
       "id": 28,
       "panels": [],
@@ -2255,7 +2255,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 142
+        "y": 150
       },
       "id": 29,
       "options": {
@@ -2347,7 +2347,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 150
+        "y": 158
       },
       "id": 30,
       "options": {
@@ -2439,7 +2439,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 158
+        "y": 166
       },
       "id": 31,
       "options": {
@@ -2478,7 +2478,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 166
+        "y": 174
       },
       "id": 32,
       "panels": [],
@@ -2544,7 +2544,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 167
+        "y": 175
       },
       "id": 33,
       "options": {
@@ -2636,7 +2636,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 175
+        "y": 183
       },
       "id": 34,
       "options": {
@@ -2728,7 +2728,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 183
+        "y": 191
       },
       "id": 35,
       "options": {
@@ -2820,7 +2820,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 191
+        "y": 199
       },
       "id": 36,
       "options": {
@@ -2859,7 +2859,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 199
+        "y": 207
       },
       "id": 37,
       "panels": [],
@@ -2925,7 +2925,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 200
+        "y": 208
       },
       "id": 38,
       "options": {
@@ -3017,7 +3017,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 208
+        "y": 216
       },
       "id": 39,
       "options": {
@@ -3109,7 +3109,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 216
+        "y": 224
       },
       "id": 40,
       "options": {
@@ -3201,7 +3201,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 224
+        "y": 232
       },
       "id": 41,
       "options": {
@@ -3309,7 +3309,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 232
+        "y": 240
       },
       "id": 227,
       "options": {
@@ -3466,7 +3466,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 232
+        "y": 240
       },
       "id": 228,
       "options": {
@@ -3586,7 +3586,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 240
+        "y": 248
       },
       "id": 229,
       "options": {
@@ -3719,7 +3719,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 240
+        "y": 248
       },
       "id": 230,
       "options": {
@@ -3841,7 +3841,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 240
+        "y": 248
       },
       "id": 231,
       "options": {
@@ -3926,7 +3926,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 248
+        "y": 256
       },
       "id": 42,
       "panels": [],
@@ -3992,7 +3992,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 249
+        "y": 257
       },
       "id": 43,
       "options": {
@@ -4084,7 +4084,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 249
+        "y": 257
       },
       "id": 44,
       "options": {
@@ -4176,7 +4176,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 249
+        "y": 257
       },
       "id": 45,
       "options": {
@@ -4268,7 +4268,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 257
+        "y": 265
       },
       "id": 46,
       "options": {
@@ -4360,7 +4360,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 257
+        "y": 265
       },
       "id": 47,
       "options": {
@@ -4399,7 +4399,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 273
+        "y": 281
       },
       "id": 48,
       "panels": [],
@@ -4465,7 +4465,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 274
+        "y": 282
       },
       "id": 49,
       "options": {
@@ -4557,7 +4557,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 282
+        "y": 290
       },
       "id": 50,
       "options": {
@@ -4649,7 +4649,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 290
+        "y": 298
       },
       "id": 51,
       "options": {
@@ -4741,7 +4741,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 298
+        "y": 306
       },
       "id": 52,
       "options": {
@@ -4780,7 +4780,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 306
+        "y": 314
       },
       "id": 232,
       "panels": [],
@@ -4858,7 +4858,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 307
+        "y": 315
       },
       "id": 233,
       "options": {
@@ -4997,7 +4997,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 307
+        "y": 315
       },
       "id": 234,
       "options": {
@@ -5119,7 +5119,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 315
+        "y": 323
       },
       "id": 235,
       "options": {
@@ -5145,7 +5145,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "mariadb_innodb_active_transactions{job=\"$job\", instance=\"$instance\"}",
+          "expr": "max_over_time(mariadb_innodb_active_transactions{job=\"$job\", instance=\"$instance\"}[$__range])",
           "refId": "A",
           "legendFormat": "Active Transactions"
         }
@@ -5212,7 +5212,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 315
+        "y": 323
       },
       "id": 236,
       "options": {
@@ -5321,7 +5321,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 315
+        "y": 323
       },
       "id": 237,
       "options": {
@@ -5470,7 +5470,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 323
+        "y": 331
       },
       "id": 238,
       "options": {
@@ -5519,7 +5519,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 331
+        "y": 339
       },
       "id": 53,
       "panels": [],
@@ -5585,7 +5585,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 332
+        "y": 340
       },
       "id": 54,
       "options": {
@@ -5624,7 +5624,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 340
+        "y": 348
       },
       "id": 55,
       "panels": [],
@@ -5690,7 +5690,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 341
+        "y": 349
       },
       "id": 56,
       "options": {
@@ -5729,7 +5729,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 349
+        "y": 357
       },
       "id": 67,
       "panels": [
@@ -6009,7 +6009,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 350
+        "y": 358
       },
       "id": 68,
       "panels": [
@@ -6255,7 +6255,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 351
+        "y": 359
       },
       "id": 70,
       "panels": [
@@ -6827,7 +6827,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 352
+        "y": 360
       },
       "id": 71,
       "panels": [
@@ -7027,10 +7027,287 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 353
+        "y": 361
       },
       "id": 72,
       "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "**Goal**: Monitor replication lag between replica and primary\n**Action**: Values > 60s indicate replication delays. Investigate slow queries, network issues, or high primary load.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 1
+          },
+          "id": 300,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "max_over_time(mariadb_replica_seconds_behind_master_seconds{job=\"$job\", instance=\"$instance\"}[$__range])",
+              "refId": "A",
+              "legendFormat": "Replication Lag"
+            }
+          ],
+          "title": "Replication Lag (Seconds Behind Master)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "**Goal**: Monitor I/O thread status\n**Action**: Value should be 1 (running). If 0, check network connectivity and master availability.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "max": 1
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 1
+          },
+          "id": 301,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_replica_io_running{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "I/O Thread"
+            }
+          ],
+          "title": "I/O Thread Status",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "**Goal**: Monitor SQL thread status\n**Action**: Value should be 1 (running). If 0, check for SQL errors and replication configuration.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "max": 1
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 1
+          },
+          "id": 302,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_replica_sql_running{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "SQL Thread"
+            }
+          ],
+          "title": "SQL Thread Status",
+          "type": "timeseries"
+        },
         {
           "datasource": {
             "type": "prometheus",
@@ -7090,7 +7367,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 1
+            "y": 9
           },
           "id": 209,
           "options": {
@@ -7116,12 +7393,194 @@
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "mariadb_replica_relay_log_space_bytes{job=\"$job\", instance=\"$instance\"}",
+              "expr": "max_over_time(mariadb_replica_relay_log_space_bytes{job=\"$job\", instance=\"$instance\"}[$__range])",
               "refId": "A",
               "legendFormat": "Relay Log Space (bytes)"
             }
           ],
           "title": "Relay Log Space",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "**Goal**: Monitor I/O errors\n**Action**: Non-zero values indicate connection or network errors. Check master connectivity.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 9
+          },
+          "id": 303,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_replica_last_io_errno{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "I/O Error Code"
+            }
+          ],
+          "title": "Last I/O Error Code",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "**Goal**: Monitor SQL execution errors\n**Action**: Non-zero values indicate query execution errors. Check error logs for details.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 9
+          },
+          "id": 304,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_replica_last_sql_errno{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "SQL Error Code"
+            }
+          ],
+          "title": "Last SQL Error Code",
           "type": "timeseries"
         },
         {
@@ -7182,8 +7641,8 @@
           "gridPos": {
             "h": 8,
             "w": 8,
-            "x": 8,
-            "y": 1
+            "x": 0,
+            "y": 17
           },
           "id": 210,
           "options": {
@@ -7275,8 +7734,8 @@
           "gridPos": {
             "h": 8,
             "w": 8,
-            "x": 16,
-            "y": 1
+            "x": 8,
+            "y": 17
           },
           "id": 221,
           "options": {
@@ -7309,6 +7768,97 @@
           ],
           "title": "Relay Log Position",
           "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "**Goal**: Verify correct master connection\n**Action**: Ensure this matches your expected master server ID. Changes indicate failover or configuration issues.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 17
+          },
+          "id": 305,
+          "options": {
+            "legend": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "mariadb_replica_master_server_id{job=\"$job\", instance=\"$instance\"}",
+              "refId": "A",
+              "legendFormat": "Master Server ID"
+            }
+          ],
+          "title": "Master Server ID",
+          "type": "timeseries"
         }
       ],
       "title": "Replication Status (requires --collector.replication)",
@@ -7320,7 +7870,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 354
+        "y": 362
       },
       "id": 73,
       "panels": [
@@ -7409,7 +7959,7 @@
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "mariadb_perf_schema_metadata_lock_count{job=\"$job\", instance=\"$instance\"}",
+              "expr": "max_over_time(mariadb_perf_schema_metadata_lock_count{job=\"$job\", instance=\"$instance\"}[$__range])",
               "refId": "A"
             }
           ],
@@ -7501,7 +8051,7 @@
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "mariadb_perf_schema_table_lock_waits{job=\"$job\", instance=\"$instance\"}",
+              "expr": "max_over_time(mariadb_perf_schema_table_lock_waits{job=\"$job\", instance=\"$instance\"}[$__range])",
               "refId": "A"
             }
           ],
@@ -7518,7 +8068,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 355
+        "y": 363
       },
       "id": 74,
       "panels": [
@@ -7607,7 +8157,7 @@
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "mariadb_metadata_lock_info_count{job=\"$job\", instance=\"$instance\"}",
+              "expr": "max_over_time(mariadb_metadata_lock_info_count{job=\"$job\", instance=\"$instance\"}[$__range])",
               "refId": "A",
               "legendFormat": "{{mode}} - {{type}}"
             }
@@ -7625,7 +8175,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 356
+        "y": 364
       },
       "id": 75,
       "panels": [
@@ -8047,7 +8597,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 357
+        "y": 365
       },
       "id": 200,
       "panels": [
@@ -8849,6 +9399,134 @@
       "title": "Exporter Self-Monitoring",
       "type": "row",
       "description": "Monitor mariadb_exporter's own performance and health. Enable with --collector.exporter flag."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "**Goal**: Monitor SQL command execution rates\n**Action**: Track SELECT, INSERT, UPDATE, DELETE, REPLACE statements at SQL level (not row operations). Useful for application query monitoring.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "commands/sec",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 67
+      },
+      "id": 306,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.5.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "rate(mariadb_global_status_com_select{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "A",
+          "legendFormat": "SELECT"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "rate(mariadb_global_status_com_insert{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "B",
+          "legendFormat": "INSERT"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "rate(mariadb_global_status_com_update{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "C",
+          "legendFormat": "UPDATE"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "rate(mariadb_global_status_com_delete{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "D",
+          "legendFormat": "DELETE"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "rate(mariadb_global_status_com_replace{job=\"$job\", instance=~\"$instance\"}[5m])",
+          "refId": "E",
+          "legendFormat": "REPLACE"
+        }
+      ],
+      "title": "SQL Command Rate (Com_*)",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",

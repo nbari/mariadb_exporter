@@ -100,3 +100,64 @@ async fn test_global_status_collector_numeric_values() -> Result<()> {
     pool.close().await;
     Ok(())
 }
+
+#[tokio::test]
+async fn test_global_status_collector_com_metrics() -> Result<()> {
+    let pool = common::create_test_pool().await?;
+    let collector = StatusCollector::new();
+    let registry = Registry::new();
+
+    collector.register_metrics(&registry)?;
+
+    // Execute some SQL commands to generate Com_ statistics
+    sqlx::query("SELECT 1").fetch_one(&pool).await?;
+    sqlx::query("SELECT 2").fetch_one(&pool).await?;
+
+    collector.collect(&pool).await?;
+
+    let metric_families = registry.gather();
+
+    // Check that Com_ metrics exist
+    let com_metrics = vec![
+        "mariadb_global_status_com_select",
+        "mariadb_global_status_com_insert",
+        "mariadb_global_status_com_update",
+        "mariadb_global_status_com_delete",
+        "mariadb_global_status_com_replace",
+    ];
+
+    for metric_name in com_metrics {
+        let found = metric_families.iter().any(|m| m.name() == metric_name);
+        assert!(
+            found,
+            "Com_ metric {} should exist. Found: {:?}",
+            metric_name,
+            metric_families
+                .iter()
+                .map(prometheus::proto::MetricFamily::name)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    // Verify Com_select has a non-zero value after our SELECT queries
+    let com_select = metric_families
+        .iter()
+        .find(|m| m.name() == "mariadb_global_status_com_select");
+
+    assert!(com_select.is_some(), "Com_select metric should exist");
+    if let Some(metric) = com_select {
+        let metrics = metric.get_metric();
+        assert!(
+            !metrics.is_empty(),
+            "Com_select should have at least one sample"
+        );
+        let value = metrics[0].get_gauge().value.unwrap_or(0.0);
+        assert!(
+            value >= 2.0,
+            "Com_select should be >= 2 after executing 2 SELECT statements, got: {value}"
+        );
+    }
+
+    pool.close().await;
+    Ok(())
+}

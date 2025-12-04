@@ -57,6 +57,12 @@ pub struct StatusCollector {
     handler_write: IntGauge,
     handler_update: IntGauge,
     handler_delete: IntGauge,
+    // Command statistics (SQL-level)
+    com_select: IntGauge,
+    com_insert: IntGauge,
+    com_update: IntGauge,
+    com_delete: IntGauge,
+    com_replace: IntGauge,
     // Table cache
     opened_tables: IntGauge,
     opened_files: IntGauge,
@@ -306,6 +312,27 @@ impl StatusCollector {
             handler_delete: g(
                 "mariadb_global_status_handler_delete",
                 "Requests to delete a row from a table",
+            ),
+            // Command statistics (SQL-level)
+            com_select: g(
+                "mariadb_global_status_com_select",
+                "Number of SELECT statements executed",
+            ),
+            com_insert: g(
+                "mariadb_global_status_com_insert",
+                "Number of INSERT statements executed",
+            ),
+            com_update: g(
+                "mariadb_global_status_com_update",
+                "Number of UPDATE statements executed",
+            ),
+            com_delete: g(
+                "mariadb_global_status_com_delete",
+                "Number of DELETE statements executed",
+            ),
+            com_replace: g(
+                "mariadb_global_status_com_replace",
+                "Number of REPLACE statements executed",
             ),
             // Table cache
             opened_tables: g(
@@ -611,6 +638,12 @@ impl StatusCollector {
             &self.handler_write,
             &self.handler_update,
             &self.handler_delete,
+            // Command statistics (SQL-level)
+            &self.com_select,
+            &self.com_insert,
+            &self.com_update,
+            &self.com_delete,
+            &self.com_replace,
             // Table cache
             &self.opened_tables,
             &self.opened_files,
@@ -807,6 +840,13 @@ impl StatusCollector {
         Self::set_from_status(status, "Handler_update", &self.handler_update);
         Self::set_from_status(status, "Handler_delete", &self.handler_delete);
 
+        // Command statistics (SQL-level)
+        Self::set_from_status(status, "Com_select", &self.com_select);
+        Self::set_from_status(status, "Com_insert", &self.com_insert);
+        Self::set_from_status(status, "Com_update", &self.com_update);
+        Self::set_from_status(status, "Com_delete", &self.com_delete);
+        Self::set_from_status(status, "Com_replace", &self.com_replace);
+
         // Table cache
         Self::set_from_status(status, "Opened_tables", &self.opened_tables);
         Self::set_from_status(status, "Opened_files", &self.opened_files);
@@ -992,47 +1032,48 @@ impl StatusCollector {
     }
 
     fn collect_variables(&self, vars: &HashMap<String, String>) {
-        // All these variables are configuration values that don't change at runtime
-        // Query them only once on first scrape to avoid issues when connections are maxed out
-        if self.config_vars_initialized.load(Ordering::Relaxed) {
-            return;
+        // Static config variables (only read once on first scrape)
+        // These cannot be changed at runtime without server restart
+        if !self.config_vars_initialized.load(Ordering::Relaxed) {
+            let to_flag = |val: Option<&String>| match val.map(|s| s.to_ascii_lowercase()) {
+                Some(v) if v == "yes" || v == "on" || v == "true" || v == "1" => 1,
+                _ => 0,
+            };
+
+            self.have_ssl
+                .set(i64::from(to_flag(vars.get(&"have_ssl".to_string()))));
+            self.have_openssl
+                .set(i64::from(to_flag(vars.get(&"have_openssl".to_string()))));
+            self.performance_schema
+                .set(i64::from(to_flag(vars.get(&"performance_schema".to_string()))));
+
+            // Mark static config variables as initialized
+            self.config_vars_initialized.store(true, Ordering::Relaxed);
+            debug!("static config variables initialized (have_ssl, have_openssl, performance_schema)");
         }
 
-        let to_flag = |val: Option<&String>| match val.map(|s| s.to_ascii_lowercase()) {
-            Some(v) if v == "yes" || v == "on" || v == "true" || v == "1" => 1,
-            _ => 0,
-        };
+        // Dynamic config variables (read on every scrape)
+        // These can be changed at runtime with SET GLOBAL commands
 
-        self.have_ssl
-            .set(i64::from(to_flag(vars.get(&"have_ssl".to_string()))));
-        self.have_openssl
-            .set(i64::from(to_flag(vars.get(&"have_openssl".to_string()))));
-        self.performance_schema
-            .set(i64::from(to_flag(vars.get(&"performance_schema".to_string()))));
-
-        // Set innodb_buffer_pool_size from global variable
+        // innodb_buffer_pool_size - can be changed dynamically in MariaDB 10.2.2+
         if let Some(raw) = vars.get(&"innodb_buffer_pool_size".to_string()) {
             if let Ok(v) = raw.parse::<i64>() {
                 self.innodb_buffer_pool_size_bytes.set(v);
-                debug!(metric = "innodb_buffer_pool_size", value = v, "initialized config variable");
+                debug!(metric = "innodb_buffer_pool_size", value = v, "updated dynamic variable");
             } else {
                 debug!(metric = "innodb_buffer_pool_size", value = raw, "could not parse variable value");
             }
         }
 
-        // Set max_connections from global variable
+        // max_connections - can be changed dynamically with SET GLOBAL max_connections
         if let Some(raw) = vars.get(&"max_connections".to_string()) {
             if let Ok(v) = raw.parse::<i64>() {
                 self.max_connections.set(v);
-                debug!(metric = "max_connections", value = v, "initialized config variable");
+                debug!(metric = "max_connections", value = v, "updated dynamic variable");
             } else {
                 debug!(metric = "max_connections", value = raw, "could not parse variable value");
             }
         }
-
-        // Mark all config variables as initialized (never query again)
-        self.config_vars_initialized.store(true, Ordering::Relaxed);
-        debug!("all config variables initialized (will not update again)");
     }
 }
 
