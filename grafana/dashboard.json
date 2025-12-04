@@ -7036,11 +7036,11 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "**Goal**: Monitor replication lag between replica and primary\n**Action**: Values > 60s indicate replication delays. Investigate slow queries, network issues, or high primary load.",
+          "description": "**Goal**: Monitor replication lag between replica and primary\n**Action**: Value -1 = replication stopped/broken (red). Values > 60s indicate replication delays. Investigate slow queries, network issues, or high primary load.",
           "fieldConfig": {
             "defaults": {
               "color": {
-                "mode": "palette-classic"
+                "mode": "thresholds"
               },
               "custom": {
                 "axisCenteredZero": false,
@@ -7069,16 +7069,43 @@
                   "mode": "none"
                 },
                 "thresholdsStyle": {
-                  "mode": "off"
+                  "mode": "line"
                 }
               },
-              "mappings": [],
+              "mappings": [
+                {
+                  "options": {
+                    "-1": {
+                      "color": "red",
+                      "index": 0,
+                      "text": "REPLICATION STOPPED"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
                   {
+                    "color": "red",
+                    "value": -1
+                  },
+                  {
                     "color": "green",
-                    "value": null
+                    "value": 0
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 30
+                  },
+                  {
+                    "color": "orange",
+                    "value": 60
+                  },
+                  {
+                    "color": "red",
+                    "value": 300
                   }
                 ]
               },

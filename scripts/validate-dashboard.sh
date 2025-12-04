@@ -60,6 +60,7 @@ EXPORTER_LOG="/tmp/validate_dashboard_exporter.log"
     --collector.locks \
     --collector.metadata \
     --collector.userstat \
+    --collector.innodb \
     >"$EXPORTER_LOG" 2>&1 &
 EXPORTER_PID=$!
 
