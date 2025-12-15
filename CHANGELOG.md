@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.0] - 2025-12-15
 
 ### Fixed
-- **Scraper**: Fixed a bug where scrape metrics were recorded twice (once explicitly and once via `Drop`), causing inaccurate scrape counts and duration metrics.
+- **Scraper**: Implemented missing `Drop` trait for `ScrapeTimer` to ensure metrics are recorded on scope exit (RAII), and added safeguards to prevent double-recording.
 - **Linting**: Resolved various `clippy` warnings including long numeric literals, documentation formatting, and potential panics in test code.
 
 ### Changed

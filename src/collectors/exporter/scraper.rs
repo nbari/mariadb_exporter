@@ -102,6 +102,7 @@ impl ScraperCollector {
             collector_name: collector_name.to_string(),
             start: Instant::now(),
             scraper: self.clone(),
+            recorded: false,
         }
     }
 
@@ -204,16 +205,29 @@ pub struct ScrapeTimer {
     collector_name: String,
     start: Instant,
     scraper: ScraperCollector,
+    recorded: bool,
 }
 
 impl ScrapeTimer {
-    pub fn success(self) {
+    pub fn success(mut self) {
+        self.recorded = true;
         let duration = self.start.elapsed().as_secs_f64();
         self.scraper.record_success(&self.collector_name, duration);
     }
 
-    pub fn error(self) {
+    pub fn error(mut self) {
+        self.recorded = true;
         self.scraper.record_error(&self.collector_name);
+    }
+}
+
+impl Drop for ScrapeTimer {
+    fn drop(&mut self) {
+        if self.recorded {
+            return;
+        }
+        let duration = self.start.elapsed().as_secs_f64();
+        self.scraper.record_success(&self.collector_name, duration);
     }
 }
 
