@@ -1,8 +1,7 @@
-use crate::collectors::Collector;
+use crate::collectors::{util::normalize_mariadb_version, Collector};
 use anyhow::{Result, anyhow};
 use futures::future::BoxFuture;
 use prometheus::{IntGauge, IntGaugeVec, Opts, Registry};
-use regex::Regex;
 use sqlx::MySqlPool;
 use sysinfo::System;
 use tracing::{debug, info_span, instrument};
@@ -14,7 +13,6 @@ pub struct VersionCollector {
     mariadb_version_info: IntGaugeVec,
     mariadb_version_num: IntGaugeVec,
     system_memory_total_bytes: IntGauge,
-    version_regex: Regex,
 }
 
 impl Default for VersionCollector {
@@ -55,9 +53,6 @@ impl VersionCollector {
         ))
         .expect("mariadb_exporter_system_memory_total_bytes");
 
-        let version_regex =
-            Regex::new(r"((\d+)(\.\d+)?(\.\d+)?)").expect("valid version regex");
-
         // Initialize system memory (static value)
         let system = System::new_all();
         let total_memory = system.total_memory();
@@ -67,7 +62,6 @@ impl VersionCollector {
             mariadb_version_info,
             mariadb_version_num,
             system_memory_total_bytes,
-            version_regex,
         }
     }
 
@@ -104,27 +98,12 @@ impl VersionCollector {
         }
     }
 
-    fn normalize_version(&self, version: &str) -> Result<(String, i64)> {
-        if let Some(captures) = self.version_regex.captures(version)
-            && let Some(version_match) = captures.get(1)
-        {
-            let parts: Vec<&str> = version_match.as_str().split('.').collect();
-            let major = parts.first().and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
-            let minor = parts.get(1).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
-            let patch = parts.get(2).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
-
-            let normalized = match parts.len() {
-                1 => format!("{major}.0.0"),
-                2 => format!("{major}.{minor}.0"),
-                _ => version_match.as_str().to_string(),
-            };
-
-            let version_num = major * 10000 + minor * 100 + patch;
-
-            return Ok((normalized, version_num));
+    fn normalize_version(version: &str) -> Result<(String, i64)> {
+        let (normalized, num) = normalize_mariadb_version(version);
+        if num == 0 && normalized == "0.0.0" {
+            return Err(anyhow!("could not parse version from server response: {version}"));
         }
-
-        Err(anyhow!("could not parse version from server response: {version}"))
+        Ok((normalized, num))
     }
 }
 
@@ -161,7 +140,7 @@ impl Collector for VersionCollector {
                 .instrument(span)
                 .await?;
 
-            let (short_version, version_num) = self.normalize_version(&full_version)?;
+            let (short_version, version_num) = Self::normalize_version(&full_version)?;
             let server_label = self.get_server_info(pool).await?;
 
             self.mariadb_version_info
@@ -186,9 +165,8 @@ mod tests {
 
     #[test]
     fn test_normalize_version() {
-        let collector = VersionCollector::new();
         assert!(matches!(
-            collector.normalize_version("10.5.12-MariaDB"),
+            VersionCollector::normalize_version("10.5.12-MariaDB"),
             Ok((ref normalized, num))
                 if normalized == "10.5.12" && num == 10 * 10000 + 5 * 100 + 12
         ));
@@ -196,9 +174,8 @@ mod tests {
 
     #[test]
     fn test_normalize_version_short() {
-        let collector = VersionCollector::new();
         assert!(matches!(
-            collector.normalize_version("11.4"),
+            VersionCollector::normalize_version("11.4"),
             Ok((ref normalized, num))
                 if normalized == "11.4.0" && num == 11 * 10000 + 4 * 100
         ));
@@ -206,9 +183,8 @@ mod tests {
 
     #[test]
     fn test_normalize_version_single_component() {
-        let collector = VersionCollector::new();
         assert!(matches!(
-            collector.normalize_version("12"),
+            VersionCollector::normalize_version("12"),
             Ok((ref normalized, num))
                 if normalized == "12.0.0" && num == 12 * 10000
         ));

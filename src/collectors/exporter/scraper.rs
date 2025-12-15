@@ -217,13 +217,6 @@ impl ScrapeTimer {
     }
 }
 
-impl Drop for ScrapeTimer {
-    fn drop(&mut self) {
-        let duration = self.start.elapsed().as_secs_f64();
-        self.scraper.record_success(&self.collector_name, duration);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -305,5 +298,32 @@ mod tests {
         assert_eq!(scraper.scrapes_total.get(), 1);
         scraper.increment_scrapes();
         assert_eq!(scraper.scrapes_total.get(), 2);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::expect_used)]
+    fn test_double_recording_bug() {
+        let scraper = ScraperCollector::new();
+        let registry = Registry::new();
+        scraper.register(&registry).unwrap();
+
+        {
+            let timer = scraper.start_scrape("test_double");
+            timer.success(); 
+            // timer is dropped here
+        }
+
+        let metrics = registry.gather();
+        
+        let duration_metric = metrics
+            .iter()
+            .find(|m| m.name() == "mariadb_exporter_collector_scrape_duration_seconds")
+            .expect("duration metric should exist");
+            
+        let count = duration_metric.get_metric().first().expect("metric should have at least one sample").get_histogram().get_sample_count();
+        
+        // If bug exists, count will be 2
+        assert_eq!(count, 1, "Should record exactly one observation, but got {count}");
     }
 }

@@ -3,7 +3,10 @@ use crate::{
     collectors::{
         config::CollectorConfig,
         registry::CollectorRegistry,
-        util::{get_excluded_databases, set_base_connect_options_from_dsn, set_mariadb_version},
+        util::{
+            get_excluded_databases, parse_mariadb_version, set_base_connect_options_from_dsn,
+            set_mariadb_version,
+        },
     },
 };
 use anyhow::{Context, Result, anyhow};
@@ -108,20 +111,7 @@ async fn initialize_version(pool: &sqlx::MySqlPool) -> Result<()> {
         .await
         .context("Failed to get MariaDB version")?;
 
-    let parsed = version_string.split('.').collect::<Vec<_>>();
-    let major = parsed
-        .first()
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(0);
-    let minor = parsed
-        .get(1)
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(0);
-    let patch = parsed
-        .get(2)
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(0);
-    let version_num = major * 10000 + minor * 100 + patch;
+    let version_num = parse_mariadb_version(&version_string);
 
     set_mariadb_version(version_num);
     info!(version = version_num, "MariaDB version detected");
