@@ -1,8 +1,10 @@
 use anyhow::Result;
 use prometheus::IntGauge;
+use sqlx::mysql::MySqlRow;
 use sqlx::{MySqlPool, Row};
-use tracing::{info_span, instrument};
+use tracing::{debug, info_span, instrument};
 use tracing_futures::Instrument as _;
+use crate::collectors::util::is_mariadb_version_at_least;
 
 /// Collector for SHOW SLAVE STATUS metrics.
 #[derive(Clone)]
@@ -15,6 +17,7 @@ pub struct ReplicaStatusCollector {
     last_io_errno: IntGauge,
     last_sql_errno: IntGauge,
     master_server_id: IntGauge,
+    replica_configured: IntGauge,
 }
 
 impl ReplicaStatusCollector {
@@ -67,6 +70,11 @@ impl ReplicaStatusCollector {
                 "Master server ID",
             )
             .expect("valid mariadb_replica_master_server_id metric"),
+            replica_configured: IntGauge::new(
+                "mariadb_replica_configured",
+                "Replica configured (1 = yes, 0 = no)",
+            )
+            .expect("valid mariadb_replica_configured metric"),
         }
     }
 
@@ -118,6 +126,12 @@ impl ReplicaStatusCollector {
         &self.master_server_id
     }
 
+    /// Get replica configured metric.
+    #[must_use]
+    pub const fn replica_configured(&self) -> &IntGauge {
+        &self.replica_configured
+    }
+
     /// Collect replica status metrics from SHOW SLAVE STATUS.
     ///
     /// # Errors
@@ -125,6 +139,29 @@ impl ReplicaStatusCollector {
     /// Returns an error if the database query fails (though queries are best-effort).
     #[instrument(skip(self, pool), level = "debug", fields(sub_collector = "replica_status"))]
     pub async fn collect(&self, pool: &MySqlPool) -> Result<()> {
+        let mut configured = None;
+
+        if is_mariadb_version_at_least(100_600) {
+            let config_span = info_span!(
+                "db.query",
+                db.system = "mysql",
+                db.operation = "SELECT",
+                db.statement = "SELECT COUNT(*) FROM performance_schema.replication_connection_configuration",
+                otel.kind = "client"
+            );
+
+            match sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM performance_schema.replication_connection_configuration",
+            )
+            .fetch_one(pool)
+            .instrument(config_span)
+            .await
+            {
+                Ok(count) => configured = Some(count > 0),
+                Err(e) => debug!(error = %e, "replication_connection_configuration not available; falling back to SHOW SLAVE STATUS"),
+            }
+        }
+
         let span = info_span!(
             "db.query",
             db.system = "mysql",
@@ -133,55 +170,112 @@ impl ReplicaStatusCollector {
             otel.kind = "client"
         );
 
-        if let Ok(rows) = sqlx::query("SHOW SLAVE STATUS")
+        match sqlx::query("SHOW SLAVE STATUS")
             .fetch_all(pool)
             .instrument(span)
             .await
-            && let Some(row) = rows.first()
         {
-            // Relay log metrics
-            let relay_space: Option<i64> = row.try_get("Relay_Log_Space").ok();
-            let relay_pos: Option<i64> = row.try_get("Exec_Master_Log_Pos").ok();
+            Ok(rows) => {
+                if configured.is_none() {
+                    configured = Some(!rows.is_empty());
+                }
 
-            // Try as u64 first (MariaDB returns unsigned), fall back to i64, then NULL
-            let seconds_behind: Option<i64> = row
-                .try_get::<Option<u64>, _>("Seconds_Behind_Master")
-                .ok()
-                .flatten()
-                .and_then(|v| i64::try_from(v).ok())
-                .or_else(|| row.try_get::<Option<i64>, _>("Seconds_Behind_Master").ok().flatten());
+                if let Some(row) = rows.first() {
+                    // Relay log metrics
+                    let relay_space: Option<i64> = row.try_get("Relay_Log_Space").ok();
+                    let relay_pos: Option<i64> = row.try_get("Exec_Master_Log_Pos").ok();
 
-            self.relay_log_space.set(relay_space.unwrap_or_default());
-            self.relay_log_pos.set(relay_pos.unwrap_or_default());
-            // Set to -1 when NULL (replication stopped/broken), otherwise use actual value
-            self.seconds_behind_master
-                .set(seconds_behind.unwrap_or(-1));
+                    // Try as u64 first (MariaDB returns unsigned), fall back to i64, then NULL
+                    let seconds_behind: Option<i64> = row
+                        .try_get::<Option<u64>, _>("Seconds_Behind_Master")
+                        .ok()
+                        .flatten()
+                        .and_then(|v| i64::try_from(v).ok())
+                        .or_else(|| {
+                            row.try_get::<Option<i64>, _>("Seconds_Behind_Master")
+                                .ok()
+                                .flatten()
+                        });
 
-            // Health status metrics
-            let io_running: Option<String> = row.try_get("Slave_IO_Running").ok();
-            let sql_running: Option<String> = row.try_get("Slave_SQL_Running").ok();
-            let last_io_errno: Option<i64> = row.try_get("Last_IO_Errno").ok();
-            let last_sql_errno: Option<i64> = row.try_get("Last_SQL_Errno").ok();
-            let master_server_id: Option<i64> = row.try_get("Master_Server_Id").ok();
+                    self.relay_log_space.set(relay_space.unwrap_or_default());
+                    self.relay_log_pos.set(relay_pos.unwrap_or_default());
+                    // Set to -1 when NULL (replication stopped/broken), otherwise use actual value
+                    self.seconds_behind_master
+                        .set(seconds_behind.unwrap_or(-1));
 
-            // Convert Yes/No to 1/0
-            self.io_running
-                .set(i64::from(io_running.as_deref() == Some("Yes")));
-            self.sql_running
-                .set(i64::from(sql_running.as_deref() == Some("Yes")));
-            self.last_io_errno.set(last_io_errno.unwrap_or_default());
-            self.last_sql_errno
-                .set(last_sql_errno.unwrap_or_default());
-            self.master_server_id
-                .set(master_server_id.unwrap_or_default());
+                    // Health status metrics
+                    let io_running: Option<String> = row.try_get("Slave_IO_Running").ok();
+                    let sql_running: Option<String> = row.try_get("Slave_SQL_Running").ok();
+                    let last_io_errno: Option<i64> = row.try_get("Last_IO_Errno").ok();
+                    let last_sql_errno: Option<i64> = row.try_get("Last_SQL_Errno").ok();
+                    let master_server_id = parse_master_server_id(row);
+
+                    // Convert Yes/No to 1/0
+                    self.io_running
+                        .set(i64::from(io_running.as_deref() == Some("Yes")));
+                    self.sql_running
+                        .set(i64::from(sql_running.as_deref() == Some("Yes")));
+                    self.last_io_errno.set(last_io_errno.unwrap_or_default());
+                    self.last_sql_errno
+                        .set(last_sql_errno.unwrap_or_default());
+                    self.master_server_id
+                        .set(master_server_id.unwrap_or_default());
+                }
+            }
+            Err(e) => debug!(error = %e, "SHOW SLAVE STATUS failed"),
         }
+
+        self.replica_configured
+            .set(i64::from(configured.unwrap_or(false)));
 
         Ok(())
     }
 }
 
+fn parse_master_server_id(row: &MySqlRow) -> Option<i64> {
+    let unsigned = row
+        .try_get::<Option<u64>, _>("Master_Server_Id")
+        .ok()
+        .flatten();
+    let signed = row
+        .try_get::<Option<i64>, _>("Master_Server_Id")
+        .ok()
+        .flatten();
+    let text = row
+        .try_get::<Option<String>, _>("Master_Server_Id")
+        .ok()
+        .flatten();
+
+    parse_master_server_id_from_values(unsigned, signed, text)
+}
+
+fn parse_master_server_id_from_values(
+    unsigned: Option<u64>,
+    signed: Option<i64>,
+    text: Option<String>,
+) -> Option<i64> {
+    unsigned
+        .and_then(|v| i64::try_from(v).ok())
+        .or(signed)
+        .or_else(|| text.and_then(|value| value.parse::<i64>().ok()))
+}
+
 impl Default for ReplicaStatusCollector {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_master_server_id_from_values;
+
+    #[test]
+    fn parses_unsigned_master_server_id() {
+        let zero_id = parse_master_server_id_from_values(Some(0), None, None);
+        assert_eq!(zero_id, Some(0));
+
+        let nonzero_id = parse_master_server_id_from_values(Some(123), None, None);
+        assert_eq!(nonzero_id, Some(123));
     }
 }

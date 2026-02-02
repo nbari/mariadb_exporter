@@ -105,6 +105,25 @@ impl VersionCollector {
         }
         Ok((normalized, num))
     }
+
+    fn update_version_metrics(
+        &self,
+        full_version: &str,
+        short_version: &str,
+        server_label: &str,
+        version_num: i64,
+    ) {
+        // Avoid stale labels if MariaDB is upgraded while exporter stays running.
+        self.mariadb_version_info.reset();
+        self.mariadb_version_num.reset();
+
+        self.mariadb_version_info
+            .with_label_values(&[full_version, short_version])
+            .set(1);
+        self.mariadb_version_num
+            .with_label_values(&[server_label])
+            .set(version_num);
+    }
 }
 
 impl Collector for VersionCollector {
@@ -143,12 +162,12 @@ impl Collector for VersionCollector {
             let (short_version, version_num) = Self::normalize_version(&full_version)?;
             let server_label = self.get_server_info(pool).await?;
 
-            self.mariadb_version_info
-                .with_label_values(&[&full_version, &short_version])
-                .set(1);
-            self.mariadb_version_num
-                .with_label_values(&[&server_label])
-                .set(version_num);
+            self.update_version_metrics(
+                &full_version,
+                &short_version,
+                &server_label,
+                version_num,
+            );
 
             Ok(())
         })
@@ -194,5 +213,41 @@ mod tests {
     fn test_collectors_name() {
         let collector = VersionCollector::new();
         assert_eq!(collector.name(), "version");
+    }
+
+    #[test]
+    fn test_version_labels_reset_on_update() -> Result<()> {
+        let collector = VersionCollector::new();
+        let registry = Registry::new();
+
+        collector.register_metrics(&registry)?;
+
+        collector.update_version_metrics(
+            "10.5.12-MariaDB",
+            "10.5.12",
+            "localhost:3306:mysql",
+            100_512,
+        );
+        collector.update_version_metrics(
+            "10.6.1-MariaDB",
+            "10.6.1",
+            "localhost:3306:mysql",
+            100_601,
+        );
+
+        let metric_families = registry.gather();
+        let version_info = metric_families
+            .iter()
+            .find(|m| m.name() == "mariadb_version_info")
+            .ok_or_else(|| anyhow!("mariadb_version_info should exist"))?;
+        assert_eq!(version_info.get_metric().len(), 1);
+
+        let version_num = metric_families
+            .iter()
+            .find(|m| m.name() == "mariadb_version_num")
+            .ok_or_else(|| anyhow!("mariadb_version_num should exist"))?;
+        assert_eq!(version_num.get_metric().len(), 1);
+
+        Ok(())
     }
 }

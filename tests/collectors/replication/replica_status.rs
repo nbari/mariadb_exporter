@@ -30,6 +30,15 @@ async fn test_replication_collector_handles_no_replication() -> Result<()> {
         "Collector should handle servers without replication gracefully"
     );
 
+    let metric_families = registry.gather();
+    let configured_metric = metric_families
+        .iter()
+        .find(|m| m.name() == "mariadb_replica_configured");
+    assert!(
+        configured_metric.is_some(),
+        "mariadb_replica_configured should be registered"
+    );
+
     pool.close().await;
     Ok(())
 }

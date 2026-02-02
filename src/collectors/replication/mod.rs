@@ -56,6 +56,7 @@ impl Collector for ReplicationCollector {
         registry.register(Box::new(self.replica_status.last_io_errno().clone()))?;
         registry.register(Box::new(self.replica_status.last_sql_errno().clone()))?;
         registry.register(Box::new(self.replica_status.master_server_id().clone()))?;
+        registry.register(Box::new(self.replica_status.replica_configured().clone()))?;
 
         // Binlog metrics
         registry.register(Box::new(self.binlog.binlog_files().clone()))?;
