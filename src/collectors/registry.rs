@@ -110,14 +110,13 @@ impl CollectorRegistry {
     /// # Errors
     ///
     /// Returns an error if metric collection or encoding fails
+    #[allow(clippy::too_many_lines)]
     #[instrument(skip(self, pool), level = "info", err, fields(otel.kind = "internal"))]
     pub async fn collect_all(&self, pool: &sqlx::MySqlPool) -> anyhow::Result<String> {
         // Increment scrape counter if scraper is available
         if let Some(ref scraper) = self.scraper {
             scraper.increment_scrapes();
         }
-
-        let mut any_success = false;
 
         // Quick connectivity check (does not guarantee every collector will succeed).
         let connect_span = info_span!(
@@ -128,33 +127,52 @@ impl CollectorRegistry {
             db.statement = "SELECT 1"
         );
 
-        match sqlx::query("SELECT 1")
+        let db_up = match sqlx::query("SELECT 1")
             .fetch_one(pool)
             .instrument(connect_span)
             .await
         {
             Ok(_) => {
                 self.mariadb_up_gauge.set(1.0);
-                any_success = true;
+
+                // Initialize version if not already set (e.g. failed at startup)
+                if crate::collectors::util::get_mariadb_version() == 0 {
+                    let version_span = info_span!("db.version_init", otel.kind = "client");
+                    if let Ok(version_string) = sqlx::query_scalar::<_, String>("SELECT VERSION()")
+                        .fetch_one(pool)
+                        .instrument(version_span)
+                        .await
+                    {
+                        let version_num =
+                            crate::collectors::util::parse_mariadb_version(&version_string);
+                        crate::collectors::util::set_mariadb_version(version_num);
+                        info!(
+                            version = version_num,
+                            "MariaDB version detected during collection"
+                        );
+                    }
+                }
+                true
             }
 
             Err(e) => {
                 error!("Failed to connect to MariaDB: {}", e);
                 self.mariadb_up_gauge.set(0.0);
-                // We still try individual collectors; some may succeed (e.g., cached metrics).
+                false
             }
-        }
+        };
 
-        // Launch all collectors concurrently.
+        // If DB is down, skip collectors except exporter self-monitoring
         let mut tasks = FuturesUnordered::new();
-
-        // Emit a summary log of which collectors are being launched in parallel.
-        let names: Vec<&'static str> = self.collectors.iter().map(super::Collector::name).collect();
-
-        info!("Launching collectors concurrently: {:?}", names);
 
         for collector in &self.collectors {
             let name = collector.name();
+
+            // Skip DB-dependent collectors if DB is down
+            if !db_up && name != "exporter" {
+                debug!("Skipping collector '{}' because database is down", name);
+                continue;
+            }
 
             // Create a span per collector execution to visualize overlap in traces.
             let span = info_span!("collector.collect", collector = %name, otel.kind = "internal");
@@ -195,20 +213,12 @@ impl CollectorRegistry {
             match res {
                 Ok(()) => {
                     debug!("Collected metrics from '{}'", name);
-                    any_success = true;
                 }
 
                 Err(e) => {
                     error!("Collector '{}' failed: {}", name, e);
                 }
             }
-        }
-
-        // If nothing worked, mark down; otherwise ensure up=1.
-        if !any_success {
-            self.mariadb_up_gauge.set(0.0);
-        } else if (self.mariadb_up_gauge.get() - 1.0).abs() > f64::EPSILON {
-            self.mariadb_up_gauge.set(1.0);
         }
 
         // Encode current registry into Prometheus exposition format.
@@ -218,8 +228,21 @@ impl CollectorRegistry {
         let encoder = TextEncoder::new();
         let metric_families = self.registry.gather();
 
+        // If DB is down, filter out DB-dependent metrics to avoid stale/zero data
+        let families_to_encode = if db_up {
+            metric_families
+        } else {
+            metric_families
+                .into_iter()
+                .filter(|mf| {
+                    let name = mf.name();
+                    name == "mariadb_up" || name.starts_with("mariadb_exporter_")
+                })
+                .collect()
+        };
+
         let mut buffer = Vec::new();
-        encoder.encode(&metric_families, &mut buffer)?;
+        encoder.encode(&families_to_encode, &mut buffer)?;
 
         // Update metrics count for next scrape
         // Count actual time series lines (non-comment, non-empty lines)
@@ -263,5 +286,122 @@ impl CollectorRegistry {
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.collectors.is_empty()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::collectors::config::CollectorConfig;
+    use sqlx::mysql::MySqlPoolOptions;
+    use std::time::Duration;
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_registry_new() {
+        let config = CollectorConfig::new().with_enabled(&["default".to_string()]);
+        let registry = CollectorRegistry::new(&config);
+
+        assert!(!registry.is_empty());
+        assert!(registry.collector_names().contains(&"default"));
+
+        // Verify core metrics are registered
+        let metrics = registry.registry().gather();
+        assert!(metrics.iter().any(|m| m.name() == "mariadb_up"));
+        assert!(
+            metrics
+                .iter()
+                .any(|m| m.name() == "mariadb_exporter_build_info")
+        );
+    }
+
+    #[test]
+    fn test_registry_empty() {
+        let config = CollectorConfig::new();
+        let registry = CollectorRegistry::new(&config);
+
+        assert!(registry.is_empty());
+        assert_eq!(registry.collector_names().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_collect_all_db_down() {
+        let config = CollectorConfig::new().with_enabled(&["default".to_string()]);
+        let registry = CollectorRegistry::new(&config);
+
+        // Use a pool that will definitely fail to connect
+        let pool = MySqlPoolOptions::new()
+            .acquire_timeout(Duration::from_millis(10))
+            .connect_lazy("mysql://invalid:invalid@127.0.0.1:1/invalid")
+            .unwrap();
+
+        let result = registry.collect_all(&pool).await;
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+
+        // Should contain mariadb_up 0
+        assert!(output.contains("mariadb_up 0"));
+
+        // DB metrics should be omitted
+        assert!(!output.contains("mariadb_global_status_uptime_seconds"));
+    }
+
+    #[test]
+    fn test_registry_collector_names() {
+        let config =
+            CollectorConfig::new().with_enabled(&["default".to_string(), "exporter".to_string()]);
+        let registry = CollectorRegistry::new(&config);
+
+        let names = registry.collector_names();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"default"));
+        assert!(names.contains(&"exporter"));
+    }
+
+    #[tokio::test]
+    async fn test_collect_all_increments_scrapes() {
+        let config = CollectorConfig::new().with_enabled(&["exporter".to_string()]);
+        let registry = CollectorRegistry::new(&config);
+
+        let pool = MySqlPoolOptions::new()
+            .acquire_timeout(Duration::from_millis(100))
+            .connect_lazy("mysql://root:root@127.0.0.1:3306/mysql")
+            .unwrap();
+
+        let output = registry.collect_all(&pool).await.unwrap();
+
+        // Should contain mariadb_exporter_scrapes_total 1
+        assert!(output.contains("mariadb_exporter_scrapes_total 1"));
+    }
+
+    #[tokio::test]
+    async fn test_collect_all_reports_metrics_count() {
+        let config = CollectorConfig::new().with_enabled(&["exporter".to_string()]);
+        let registry = CollectorRegistry::new(&config);
+
+        let pool = MySqlPoolOptions::new()
+            .acquire_timeout(Duration::from_millis(100))
+            .connect_lazy("mysql://root:root@127.0.0.1:3306/mysql")
+            .unwrap();
+
+        // First scrape to trigger count update for NEXT scrape
+        let _ = registry.collect_all(&pool).await.unwrap();
+        // Second scrape to see the count from the first one
+        let output = registry.collect_all(&pool).await.unwrap();
+
+        // Should contain mariadb_exporter_metrics_total
+        assert!(output.contains("mariadb_exporter_metrics_total"));
+
+        // Extract the value and check it's > 0
+        let count = output
+            .lines()
+            .find(|l| l.starts_with("mariadb_exporter_metrics_total"))
+            .and_then(|l| l.split_whitespace().last())
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(0.0);
+
+        assert!(count > 0.0);
     }
 }

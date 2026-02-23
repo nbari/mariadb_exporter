@@ -6,12 +6,14 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 /// Get DSN from environment or use default
+#[allow(dead_code)]
 pub fn get_test_dsn() -> String {
     env::var("MARIADB_EXPORTER_DSN")
         .unwrap_or_else(|_| "mysql://root:root@127.0.0.1:3306/mysql".to_string())
 }
 
 /// Create a test database pool
+#[allow(dead_code)]
 pub async fn create_test_pool() -> Result<MySqlPool> {
     let dsn = get_test_dsn();
 

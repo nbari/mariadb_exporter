@@ -1004,7 +1004,7 @@ impl StatusCollector {
             let sql_running: Option<String> = row.try_get("Slave_SQL_Running").ok();
 
             self.slave_status_seconds_behind
-                .set(seconds.unwrap_or_default());
+                .set(seconds.unwrap_or(-1));
             self.slave_status_io_running
                 .set(i64::from(Self::as_running(io_running.as_ref())));
             self.slave_status_sql_running

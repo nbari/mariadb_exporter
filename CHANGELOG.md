@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-02-23
+
+### Fixed
+- **InnoDB**: Correctly sum all "OS waits" in `mariadb_innodb_semaphore_waits_total` instead of only reporting the last occurrence.
+- **Replication**: Report `-1` for `mariadb_slave_status_seconds_behind_master` when the value is `NULL` (replication stopped/broken) to avoid false sync signals.
+- **CLI**: Fixed `test_handle_action_signature` to properly test invalid DSN formats without hanging.
+- **Correctness**: Added `.reset()` calls to multiple collectors (`Tables`, `UserStat`, `Metadata`, `Statements`, `TLS`, `Version`) to prevent stale labels when entities are dropped.
+- **Robustness**: Skip setting metrics if queries fail (e.g. `Performance Schema` missing) rather than reporting misleading zero values.
+
+### Changed
+- **Resilience**: The exporter now uses lazy database connections and a zero-minimum pool, allowing it to start even when MariaDB is unreachable.
+- **Resilience**: The `/metrics` endpoint now always returns `HTTP 200`. During MariaDB outages, it serves a best-effort response with `mariadb_up 0` and omits DB-dependent metrics.
+- **Resilience**: MariaDB version detection is now deferred if it fails at startup, retrying during the first scrape.
+
+### Added
+- **InnoDB**: New `mariadb_innodb_semaphore_wait_time_ms_total` metric parsing individual thread wait times from `SHOW ENGINE INNODB STATUS`.
+- **Tests**: New end-to-end integration test `tests/connectivity_failure.rs` for database outage scenarios.
+- **Tests**: Comprehensive unit tests for `CollectorRegistry` in `src/collectors/registry.rs`.
+- **Tests**: Regression tests for InnoDB semaphore parsing and metrics resetting.
+
 ## [0.5.1] - 2026-02-02
 
 ### Fixed

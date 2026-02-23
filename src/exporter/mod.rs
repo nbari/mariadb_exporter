@@ -24,12 +24,12 @@ use opentelemetry_http::HeaderExtractor;
 use secrecy::{ExposeSecret, SecretString};
 use sqlx::mysql::MySqlPoolOptions;
 use std::time::Duration;
-use tokio::{net::TcpListener, time::timeout};
+use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_http::{
     request_id::PropagateRequestIdLayer, set_header::SetRequestHeaderLayer, trace::TraceLayer,
 };
-use tracing::{Span, error, info, info_span};
+use tracing::{Span, error, info, info_span, warn};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use ulid::Ulid;
 
@@ -54,9 +54,14 @@ pub async fn new(
     dsn: SecretString,
     collectors: Vec<String>,
 ) -> Result<()> {
-    let pool = connect_pool(&dsn).await?;
+    let pool = connect_pool(&dsn)?;
 
-    initialize_version(&pool).await?;
+    if let Err(e) = initialize_version(&pool).await {
+        warn!(
+            "Failed to initialize MariaDB version at startup: {}. Will retry during collection.",
+            e
+        );
+    }
 
     let _ = set_base_connect_options_from_dsn(&dsn);
 
@@ -81,26 +86,18 @@ pub async fn new(
     Ok(())
 }
 
-async fn connect_pool(dsn: &SecretString) -> Result<sqlx::MySqlPool> {
+fn connect_pool(dsn: &SecretString) -> Result<sqlx::MySqlPool> {
     let db_dsn = dsn.expose_secret().to_string();
 
-    let pool = match timeout(
-        Duration::from_secs(2),
-        MySqlPoolOptions::new()
-            .min_connections(1)
-            .max_connections(3)
-            .max_lifetime(Duration::from_secs(120))
-            .test_before_acquire(true)
-            .connect(&db_dsn),
-    )
-    .await
-    {
-        Ok(Ok(pool)) => pool,
-        Ok(Err(err)) => return Err(err).context("Failed to connect to database"),
-        Err(_) => return Err(anyhow!("Failed to connect to database: timed out after 2s")),
-    };
+    let pool = MySqlPoolOptions::new()
+        .min_connections(0)
+        .max_connections(3)
+        .max_lifetime(Duration::from_secs(120))
+        .acquire_timeout(Duration::from_secs(2))
+        .test_before_acquire(true)
+        .connect_lazy(&db_dsn)?;
 
-    info!("Connected to database");
+    info!("Database pool initialized (lazy)");
 
     Ok(pool)
 }

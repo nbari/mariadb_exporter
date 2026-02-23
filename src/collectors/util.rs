@@ -28,6 +28,15 @@ static POOLS: OnceCell<RwLock<HashMap<String, MySqlPool>>> = OnceCell::new();
 /// `MariaDB` version number (e.g., `100_400` for v10.4).
 static MARIADB_VERSION: OnceCell<i32> = OnceCell::new();
 
+/// Conversion factor: Picoseconds to Seconds
+pub const PICO_TO_SECONDS: f64 = 1_000_000_000_000.0;
+
+/// Conversion factor: Picoseconds to Milliseconds
+pub const PICO_TO_MILLIS: f64 = 1_000_000_000.0;
+
+/// List of internal/system schemas to exclude from general collection
+pub const SYSTEM_SCHEMAS: &[&str] = &["mysql", "information_schema", "performance_schema", "sys"];
+
 /// Set the excluded databases from CLI/env. Call this once during startup.
 pub fn set_excluded_databases(list: Vec<String>) {
     let mut cleaned: Vec<String> = list

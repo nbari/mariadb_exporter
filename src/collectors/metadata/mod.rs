@@ -59,6 +59,8 @@ impl Collector for MetadataCollector {
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "metadata", otel.kind = "internal"))]
     fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
+            self.lock_info_count.reset();
+
             let exists_span = info_span!(
                 "db.query",
                 db.system = "mysql",

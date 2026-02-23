@@ -88,12 +88,17 @@ impl VersionCollector {
             Ok((host, port, database)) => {
                 let host = host.unwrap_or_else(|| "localhost".to_string());
                 let port = port.unwrap_or(3306);
-                let db = database.unwrap_or_else(|| "mysql".to_string());
+                let db = database.unwrap_or_else(|| {
+                    crate::collectors::util::get_default_database()
+                        .unwrap_or("mysql")
+                        .to_string()
+                });
                 Ok(format!("{host}:{port}:{db}"))
             }
             Err(e) => {
-                debug!(error = %e, "failed to fetch server info; using fallback label");
-                Ok("unknown".to_string())
+                debug!(error = %e, "failed to fetch server info; using fallback label from DSN");
+                let db = crate::collectors::util::get_default_database().unwrap_or("unknown");
+                Ok(format!("unknown:{db}"))
             }
         }
     }

@@ -1,7 +1,7 @@
-use crate::collectors::Collector;
+use crate::collectors::{util::PICO_TO_SECONDS, Collector};
 use anyhow::Result;
 use futures::future::BoxFuture;
-use prometheus::{IntGauge, IntGaugeVec, Opts, Registry};
+use prometheus::{Gauge, GaugeVec, IntGauge, Opts, Registry};
 use sqlx::MySqlPool;
 use tracing::{info_span, instrument};
 use tracing_futures::Instrument as _;
@@ -14,8 +14,8 @@ pub struct StatementsCollector {
     digest_warnings: IntGauge,
     digest_rows_examined: IntGauge,
     digest_rows_sent: IntGauge,
-    digest_latency_seconds: IntGauge,
-    top_digest_latencies: IntGaugeVec,
+    digest_latency_seconds: Gauge,
+    top_digest_latencies: GaugeVec,
 }
 
 impl StatementsCollector {
@@ -31,7 +31,7 @@ impl StatementsCollector {
             IntGauge::new(name, help).expect("valid statement metric")
         };
 
-        let top_digest_latencies = IntGaugeVec::new(
+        let top_digest_latencies = GaugeVec::new(
             Opts::new(
                 "mariadb_perf_schema_digest_latency_seconds",
                 "Top statement digests by total latency (seconds)",
@@ -61,10 +61,11 @@ impl StatementsCollector {
                 "mariadb_perf_schema_digest_rows_sent_total",
                 "Total rows sent across statement digests",
             ),
-            digest_latency_seconds: g(
+            digest_latency_seconds: Gauge::new(
                 "mariadb_perf_schema_digest_latency_seconds_total",
                 "Total latency across statement digests in picoseconds converted to seconds",
-            ),
+            )
+            .expect("valid mariadb_perf_schema_digest_latency_seconds_total metric"),
             top_digest_latencies,
         }
     }
@@ -101,6 +102,9 @@ impl Collector for StatementsCollector {
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "statements", otel.kind = "internal"))]
     fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
+            // Reset top digests to avoid stale data
+            self.top_digest_latencies.reset();
+
             // Aggregate totals
             let totals_span = info_span!(
                 "db.query",
@@ -110,7 +114,7 @@ impl Collector for StatementsCollector {
                 otel.kind = "client"
             );
 
-            let totals = sqlx::query_as::<_, (u64, u64, u64, u64, u64, u64)>(
+            let totals = match sqlx::query_as::<_, (u64, u64, u64, u64, u64, u64)>(
                 "SELECT
                     COALESCE(SUM(COUNT_STAR),0) as total,
                     COALESCE(SUM(SUM_ERRORS),0) as errors,
@@ -122,11 +126,16 @@ impl Collector for StatementsCollector {
             )
             .fetch_one(pool)
             .instrument(totals_span)
-            .await
-            .unwrap_or((0, 0, 0, 0, 0, 0));
+            .await {
+                Ok(t) => t,
+                Err(e) => {
+                    tracing::error!("Failed to aggregate statement digests: {}", e);
+                    return Ok(());
+                }
+            };
 
-            #[allow(clippy::cast_possible_wrap)]
-            let latency_seconds = (totals.5 / 1_000_000_000_000) as i64;
+            #[allow(clippy::cast_precision_loss)]
+            let latency_seconds = (totals.5 as f64) / PICO_TO_SECONDS;
 
             #[allow(clippy::cast_possible_wrap)]
             {
@@ -167,8 +176,8 @@ impl Collector for StatementsCollector {
             for (digest, schema, latency_ps) in rows {
                 let digest_label = digest.unwrap_or_else(|| "unknown".to_string());
                 let schema_label = schema.unwrap_or_else(|| "unknown".to_string());
-                #[allow(clippy::cast_possible_wrap)]
-                let latency_seconds = (latency_ps / 1_000_000_000_000) as i64;
+                #[allow(clippy::cast_precision_loss)]
+                let latency_seconds = (latency_ps as f64) / PICO_TO_SECONDS;
                 self.top_digest_latencies
                     .with_label_values(&[digest_label.as_str(), schema_label.as_str()])
                     .set(latency_seconds);

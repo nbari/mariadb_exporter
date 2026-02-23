@@ -13,6 +13,7 @@ MariaDB metrics exporter for Prometheus written in Rust.
 * **Compatibility** – Metric names align with Prometheus `mysqld_exporter` (prefixed `mariadb_`).
 * **Lean defaults** – Essential availability, InnoDB, and replication metrics enabled by default; optional collectors opt-in.
 * **Low footprint** – Designed to minimize cardinality and avoid expensive scans.
+* **Resilient** – Always serves `/metrics` (HTTP 200) even when MariaDB is unreachable. During an outage, `mariadb_up` becomes `0`, and DB-dependent metrics are omitted to avoid stale data.
 
 ## Download or build
 

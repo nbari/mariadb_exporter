@@ -89,6 +89,9 @@ impl SslStatusCollector {
     /// Returns an error if the database query fails (though queries are best-effort).
     #[instrument(skip(self, pool), level = "debug", fields(sub_collector = "ssl_status"))]
     pub async fn collect(&self, pool: &MySqlPool) -> Result<()> {
+        // Reset info metrics to avoid stale data
+        self.version_info.reset();
+
         let span = info_span!(
             "db.query",
             db.system = "mysql",

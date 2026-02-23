@@ -103,6 +103,16 @@ impl Collector for UserStatCollector {
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "userstat", otel.kind = "internal"))]
     fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
+            // Reset metrics to avoid stale data
+            self.connections_total.reset();
+            self.bytes_received_total.reset();
+            self.bytes_sent_total.reset();
+            self.rows_read_total.reset();
+            self.rows_sent_total.reset();
+            self.rows_deleted_total.reset();
+            self.rows_inserted_total.reset();
+            self.rows_updated_total.reset();
+
             // Check userstat status.
             let status_span = info_span!(
                 "db.query",

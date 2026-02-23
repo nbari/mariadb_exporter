@@ -26,9 +26,9 @@ pub async fn metrics(
         Err(e) => {
             error!("Failed to collect metrics: {}", e);
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::OK,
                 headers,
-                format!("Error collecting metrics: {e}"),
+                format!("# Error collecting metrics: {e}\nmariadb_up 0\n"),
             )
         }
     }

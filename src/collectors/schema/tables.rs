@@ -51,6 +51,17 @@ impl TablesCollector {
     /// Returns an error if the database query fails.
     #[instrument(skip(self, pool), level = "debug", fields(sub_collector = "tables"))]
     pub async fn collect(&self, pool: &MySqlPool) -> Result<()> {
+        // Reset metrics to avoid stale data from previous scrapes
+        self.table_size_bytes.reset();
+        self.table_rows.reset();
+
+        // Build exclusion list from constant
+        let excluded = crate::collectors::util::SYSTEM_SCHEMAS
+            .iter()
+            .map(|s| format!("'{s}'"))
+            .collect::<Vec<_>>()
+            .join(",");
+
         // Limit to avoid runaway cardinality: sample up to 20 largest tables.
         let span = info_span!(
             "db.query",
@@ -60,18 +71,20 @@ impl TablesCollector {
             otel.kind = "client"
         );
 
-        let rows = match sqlx::query_as::<_, (String, String, u64, u64)>(
+        let query = format!(
             "SELECT TABLE_SCHEMA, TABLE_NAME,
                     CAST(COALESCE(DATA_LENGTH,0) + COALESCE(INDEX_LENGTH,0) AS UNSIGNED) AS size_bytes,
                     CAST(COALESCE(TABLE_ROWS,0) AS UNSIGNED) as rows_est
              FROM information_schema.tables
-             WHERE TABLE_SCHEMA NOT IN ('mysql', 'performance_schema', 'information_schema', 'sys')
+             WHERE TABLE_SCHEMA NOT IN ({excluded})
              ORDER BY size_bytes DESC
-             LIMIT 20",
-        )
-        .fetch_all(pool)
-        .instrument(span)
-        .await
+             LIMIT 20"
+        );
+
+        let rows = match sqlx::query_as::<_, (String, String, u64, u64)>(&query)
+            .fetch_all(pool)
+            .instrument(span)
+            .await
         {
             Ok(r) => r,
             Err(e) => {

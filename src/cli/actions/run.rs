@@ -32,16 +32,13 @@ mod tests {
         let action = Action::Run {
             port: 9999,
             listen: None,
-            dsn: SecretString::new("mysql://root:password@localhost:3306/mysql".into()),
+            dsn: SecretString::new("invalid-dsn".into()),
             collectors: vec!["default".to_string()],
         };
 
         let result = handle(action).await;
 
-        assert!(
-            result.is_err(),
-            "Should fail without a real database connection"
-        );
+        assert!(result.is_err(), "Should fail with an invalid DSN format");
     }
 
     #[test]

@@ -182,6 +182,8 @@ impl StatusParser {
         let mut lsn_current: Option<i64> = None;
         let mut lsn_checkpoint: Option<i64> = None;
         let mut active_trx = 0;
+        let mut semaphore_waits = 0;
+        let mut semaphore_wait_time_ms = 0.0;
 
         for line in status.lines() {
             let line = line.trim();
@@ -218,15 +220,26 @@ impl StatusParser {
             else if line.starts_with("---TRANSACTION") && line.contains("ACTIVE") {
                 active_trx += 1;
             }
-            // Parse semaphore waits
+            // Parse individual semaphore waits/times
+            // Example: "--Thread 123 has waited at btr0cur.cc line 123 for 5.00 seconds the semaphore:"
+            else if line.contains("has waited at") && line.contains("for") && line.contains("seconds") {
+                if let Some(wait_part) = line.split("for").nth(1)
+                    && let Some(seconds_str) = wait_part.split_whitespace().next()
+                    && let Ok(seconds) = seconds_str.parse::<f64>()
+                {
+                    semaphore_wait_time_ms += seconds * 1000.0;
+                    debug!(wait_seconds = seconds, "parsed individual semaphore wait time");
+                }
+            }
+            // Parse cumulative semaphore waits
             // Example: "Mutex spin waits 12345, rounds 67890, OS waits 123"
             else if line.contains("OS waits")
                 && let Some(waits_str) = line.split("OS waits").nth(1)
                 && let Some(num_str) = waits_str.split_whitespace().next()
                 && let Ok(waits) = num_str.parse::<i64>()
             {
-                self.semaphore_waits.set(waits);
-                debug!(semaphore_waits = waits, "parsed semaphore waits");
+                semaphore_waits += waits;
+                debug!(semaphore_waits = waits, "parsed semaphore waits part");
             }
             // Parse adaptive hash index
             // Example: "123456 hash searches/s, 12345 non-hash searches/s"
@@ -267,6 +280,16 @@ impl StatusParser {
         debug!(
             active_transactions = active_trx,
             "counted active transactions"
+        );
+
+        // Set total semaphore waits and time
+        self.semaphore_waits.set(semaphore_waits);
+        #[allow(clippy::cast_possible_truncation)]
+        self.semaphore_wait_time_ms.set(semaphore_wait_time_ms as i64);
+        debug!(
+            semaphore_waits_total = semaphore_waits,
+            semaphore_wait_time_total_ms = semaphore_wait_time_ms,
+            "summed semaphore metrics"
         );
 
         Ok(())
@@ -327,12 +350,16 @@ Last checkpoint at           123450000
         let status = "
 Mutex spin waits 12345, rounds 67890, OS waits 123
 RW-shared spins 54321, rounds 98765, OS waits 456
+--Thread 123 has waited at btr0cur.cc line 123 for 5.00 seconds the semaphore:
+--Thread 456 has waited at ha_innodb.cc line 456 for 1.25 seconds the semaphore:
         ";
 
         parser.parse(status).unwrap();
 
-        // Should capture the last OS waits value
-        assert_eq!(parser.semaphore_waits.get(), 456);
+        // Should capture the sum of all OS waits values (123 + 456 = 579)
+        assert_eq!(parser.semaphore_waits.get(), 579);
+        // Should capture the sum of all wait times (5.00 + 1.25 = 6.25 seconds = 6250 ms)
+        assert_eq!(parser.semaphore_wait_time_ms.get(), 6250);
     }
 
     #[test]

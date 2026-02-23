@@ -49,15 +49,16 @@ impl MetadataLocksCollector {
             otel.kind = "client"
         );
 
-        let meta_count: i64 = sqlx::query_scalar(
+        let meta_count: Result<i64, _> = sqlx::query_scalar(
             "SELECT COUNT(*) FROM performance_schema.metadata_locks",
         )
         .fetch_one(pool)
         .instrument(span)
-        .await
-        .unwrap_or(0);
+        .await;
 
-        self.lock_count.set(meta_count);
+        if let Ok(count) = meta_count {
+            self.lock_count.set(count);
+        }
 
         Ok(())
     }

@@ -49,16 +49,17 @@ impl TableLockWaitsCollector {
             otel.kind = "client"
         );
 
-        let table_waits: i64 = sqlx::query_scalar(
+        let table_waits: Result<i64, _> = sqlx::query_scalar(
             "SELECT COALESCE(SUM(COUNT_STAR),0)
              FROM performance_schema.table_lock_waits_summary_global",
         )
         .fetch_one(pool)
         .instrument(span)
-        .await
-        .unwrap_or(0);
+        .await;
 
-        self.lock_waits.set(table_waits);
+        if let Ok(waits) = table_waits {
+            self.lock_waits.set(waits);
+        }
 
         Ok(())
     }
