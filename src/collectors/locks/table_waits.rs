@@ -45,20 +45,25 @@ impl TableLockWaitsCollector {
             "db.query",
             db.system = "mysql",
             db.operation = "SELECT",
-            db.statement = "sum table lock waits",
+            db.statement = "SELECT CAST(SUM(COUNT_STAR) AS UNSIGNED) FROM performance_schema.table_lock_waits_summary_global",
             otel.kind = "client"
         );
 
-        let table_waits: Result<i64, _> = sqlx::query_scalar(
-            "SELECT COALESCE(SUM(COUNT_STAR),0)
+        let result: Result<i64, _> = sqlx::query_scalar(
+            "SELECT CAST(COALESCE(SUM(COUNT_STAR),0) AS UNSIGNED)
              FROM performance_schema.table_lock_waits_summary_global",
         )
         .fetch_one(pool)
         .instrument(span)
         .await;
 
-        if let Ok(waits) = table_waits {
-            self.lock_waits.set(waits);
+        match result {
+            Ok(waits) => {
+                self.lock_waits.set(waits);
+            }
+            Err(e) => {
+                tracing::debug!("Table lock waits (performance_schema) not available: {}", e);
+            }
         }
 
         Ok(())

@@ -163,22 +163,22 @@ impl Collector for UserStatCollector {
                 otel.kind = "client"
             );
 
-            let rows = match sqlx::query_as::<_, (String, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64)>(
-                "SELECT USER, TOTAL_CONNECTIONS, BYTES_RECEIVED, BYTES_SENT,
-                        ROWS_READ, ROWS_SENT, ROWS_DELETED, ROWS_INSERTED, ROWS_UPDATED,
+            let rows = sqlx::query_as::<_, (String, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64)>(
+                "SELECT USER, 
+                        CAST(TOTAL_CONNECTIONS AS SIGNED), 
+                        CAST(BYTES_RECEIVED AS SIGNED), 
+                        CAST(BYTES_SENT AS SIGNED),
+                        CAST(ROWS_READ AS SIGNED), 
+                        CAST(ROWS_SENT AS SIGNED), 
+                        CAST(ROWS_DELETED AS SIGNED), 
+                        CAST(ROWS_INSERTED AS SIGNED), 
+                        CAST(ROWS_UPDATED AS SIGNED),
                         0 as rows_tmp1, 0 as rows_tmp2, 0 as rows_tmp3
                  FROM information_schema.USER_STATISTICS",
             )
             .fetch_all(pool)
             .instrument(span)
-            .await
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::error!("User statistics query failed: {}", e);
-                    vec![]
-                }
-            };
+            .await?;
 
             for (user, total_conn, bytes_recv, bytes_sent, rows_read, rows_sent, rows_del, rows_ins, rows_upd, _, _, _) in rows {
                 let u = user.as_str();

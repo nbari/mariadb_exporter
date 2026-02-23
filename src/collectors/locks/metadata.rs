@@ -45,19 +45,24 @@ impl MetadataLocksCollector {
             "db.query",
             db.system = "mysql",
             db.operation = "SELECT",
-            db.statement = "count metadata locks",
+            db.statement = "SELECT COUNT(*) FROM performance_schema.metadata_locks",
             otel.kind = "client"
         );
 
-        let meta_count: Result<i64, _> = sqlx::query_scalar(
+        let result: Result<i64, _> = sqlx::query_scalar(
             "SELECT COUNT(*) FROM performance_schema.metadata_locks",
         )
         .fetch_one(pool)
         .instrument(span)
         .await;
 
-        if let Ok(count) = meta_count {
-            self.lock_count.set(count);
+        match result {
+            Ok(count) => {
+                self.lock_count.set(count);
+            }
+            Err(e) => {
+                tracing::debug!("Metadata locks (performance_schema) not available: {}", e);
+            }
         }
 
         Ok(())

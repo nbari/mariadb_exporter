@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::expect_used)]
 use anyhow::Result;
+use mariadb_exporter::collectors::Collector;
 use mariadb_exporter::collectors::innodb::status::StatusParser as InnodbStatusParser;
 
 #[test]
@@ -26,6 +27,42 @@ RW-shared spins 30, rounds 40, OS waits 15
         3500,
         "Should sum all wait times"
     );
+}
+
+#[tokio::test]
+async fn regression_statements_type_safety() -> Result<()> {
+    use mariadb_exporter::collectors::statements::StatementsCollector;
+    use prometheus::Registry;
+
+    let dsn = std::env::var("MARIADB_EXPORTER_DSN")
+        .unwrap_or_else(|_| "mysql://root:root@127.0.0.1:3306/mysql".to_string());
+
+    let Ok(pool) = sqlx::mysql::MySqlPoolOptions::new()
+        .max_connections(1)
+        .connect(&dsn)
+        .await
+    else {
+        eprintln!("Skipping regression_statements_type_safety: DB not available");
+        return Ok(());
+    };
+
+    let collector = StatementsCollector::new();
+    let registry = Registry::new();
+    collector.register_metrics(&registry)?;
+
+    // If this fails due to DECIMAL vs u64 mismatch, the test will now FAIL
+    // because we no longer swallow errors in the collector.
+    collector.collect(&pool).await?;
+
+    let metrics = registry.gather();
+    assert!(
+        metrics
+            .iter()
+            .any(|m| m.name().starts_with("mariadb_perf_schema_digest")),
+        "Statements metrics should be present in the registry"
+    );
+
+    Ok(())
 }
 
 #[tokio::test]

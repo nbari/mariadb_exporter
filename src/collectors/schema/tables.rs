@@ -81,17 +81,10 @@ impl TablesCollector {
              LIMIT 20"
         );
 
-        let rows = match sqlx::query_as::<_, (String, String, u64, u64)>(&query)
+        let rows = sqlx::query_as::<_, (String, String, u64, u64)>(&query)
             .fetch_all(pool)
             .instrument(span)
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::error!("Schema collector query failed: {}", e);
-                vec![]
-            }
-        };
+            .await?;
 
         tracing::debug!("Schema collector found {} tables", rows.len());
 

@@ -105,7 +105,7 @@ impl QueryResponseTimeCollector {
         );
 
         let rows = match sqlx::query_as::<_, (String, u64)>(
-            "SELECT TIME, COUNT FROM information_schema.QUERY_RESPONSE_TIME",
+            "SELECT TIME, CAST(COUNT AS UNSIGNED) FROM information_schema.QUERY_RESPONSE_TIME",
         )
         .fetch_all(pool)
         .instrument(span)

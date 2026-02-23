@@ -4,6 +4,7 @@
 //! - Cached tiny pools per non-default database (reuse across scrapes).
 
 use anyhow::{Result, anyhow};
+use arc_swap::ArcSwap;
 use once_cell::sync::OnceCell;
 use regex::Regex;
 use secrecy::{ExposeSecret, SecretString};
@@ -23,10 +24,10 @@ static BASE_OPTS: OnceCell<MySqlConnectOptions> = OnceCell::new();
 static DEFAULT_DB: OnceCell<String> = OnceCell::new();
 
 /// Cache of per-database tiny pools (only for non-default DBs).
-static POOLS: OnceCell<RwLock<HashMap<String, MySqlPool>>> = OnceCell::new();
+static POOLS: OnceCell<tokio::sync::RwLock<HashMap<String, MySqlPool>>> = OnceCell::new();
 
 /// `MariaDB` version number (e.g., `100_400` for v10.4).
-static MARIADB_VERSION: OnceCell<i32> = OnceCell::new();
+static MARIADB_VERSION: OnceCell<ArcSwap<i32>> = OnceCell::new();
 
 /// Conversion factor: Picoseconds to Seconds
 pub const PICO_TO_SECONDS: f64 = 1_000_000_000_000.0;
@@ -66,14 +67,15 @@ pub fn is_database_excluded(datname: &str) -> bool {
 
 /// Set the `MariaDB` version. Call this once during startup after connecting.
 pub fn set_mariadb_version(version: i32) {
-    let _ = MARIADB_VERSION.set(version);
+    let cell = MARIADB_VERSION.get_or_init(|| ArcSwap::from_pointee(0));
+    cell.store(Arc::new(version));
 }
 
 /// Get the `MariaDB` version number.
 /// Returns 0 if not set (should never happen in production).
 #[inline]
 pub fn get_mariadb_version() -> i32 {
-    MARIADB_VERSION.get().copied().unwrap_or(0)
+    MARIADB_VERSION.get().map_or(0, |v| **v.load())
 }
 
 /// Check if `MariaDB` version is at least the specified minimum.
@@ -250,6 +252,11 @@ mod tests {
 
     #[test]
     fn test_mariadb_version_utilities() {
+        // Reset global state for test isolation
+        if let Some(cell) = MARIADB_VERSION.get() {
+            cell.store(Arc::new(0));
+        }
+
         assert_eq!(get_mariadb_version(), 0);
         assert!(!is_mariadb_version_at_least(100_000));
 

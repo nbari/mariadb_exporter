@@ -105,6 +105,29 @@ impl Collector for StatementsCollector {
             // Reset top digests to avoid stale data
             self.top_digest_latencies.reset();
 
+            // Confirm table exists (Performance Schema might be off)
+            let exists_span = info_span!(
+                "db.query",
+                db.system = "mysql",
+                db.operation = "SELECT",
+                db.statement = "check events_statements_summary_by_digest table",
+                otel.kind = "client"
+            );
+
+            let has_table = sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='performance_schema' AND table_name='events_statements_summary_by_digest'",
+            )
+            .fetch_one(pool)
+            .instrument(exists_span)
+            .await
+            .unwrap_or(0)
+                > 0;
+
+            if !has_table {
+                tracing::debug!("events_statements_summary_by_digest not available; skipping collection");
+                return Ok(());
+            }
+
             // Aggregate totals
             let totals_span = info_span!(
                 "db.query",
@@ -114,25 +137,19 @@ impl Collector for StatementsCollector {
                 otel.kind = "client"
             );
 
-            let totals = match sqlx::query_as::<_, (u64, u64, u64, u64, u64, u64)>(
+            let totals = sqlx::query_as::<_, (u64, u64, u64, u64, u64, u64)>(
                 "SELECT
-                    COALESCE(SUM(COUNT_STAR),0) as total,
-                    COALESCE(SUM(SUM_ERRORS),0) as errors,
-                    COALESCE(SUM(SUM_WARNINGS),0) as warnings,
-                    COALESCE(SUM(SUM_ROWS_EXAMINED),0) as rows_examined,
-                    COALESCE(SUM(SUM_ROWS_SENT),0) as rows_sent,
-                    COALESCE(SUM(SUM_TIMER_WAIT),0) as latency_ps
+                    CAST(COALESCE(SUM(COUNT_STAR),0) AS UNSIGNED) as total,
+                    CAST(COALESCE(SUM(SUM_ERRORS),0) AS UNSIGNED) as errors,
+                    CAST(COALESCE(SUM(SUM_WARNINGS),0) AS UNSIGNED) as warnings,
+                    CAST(COALESCE(SUM(SUM_ROWS_EXAMINED),0) AS UNSIGNED) as rows_examined,
+                    CAST(COALESCE(SUM(SUM_ROWS_SENT),0) AS UNSIGNED) as rows_sent,
+                    CAST(COALESCE(SUM(SUM_TIMER_WAIT),0) AS UNSIGNED) as latency_ps
                 FROM performance_schema.events_statements_summary_by_digest",
             )
             .fetch_one(pool)
             .instrument(totals_span)
-            .await {
-                Ok(t) => t,
-                Err(e) => {
-                    tracing::error!("Failed to aggregate statement digests: {}", e);
-                    return Ok(());
-                }
-            };
+            .await?;
 
             #[allow(clippy::cast_precision_loss)]
             let latency_seconds = (totals.5 as f64) / PICO_TO_SECONDS;
@@ -157,7 +174,7 @@ impl Collector for StatementsCollector {
             );
 
             let rows = match sqlx::query_as::<_, (Option<String>, Option<String>, u64)>(
-                "SELECT DIGEST_TEXT, SCHEMA_NAME, SUM_TIMER_WAIT
+                "SELECT DIGEST_TEXT, SCHEMA_NAME, CAST(SUM_TIMER_WAIT AS UNSIGNED)
                  FROM performance_schema.events_statements_summary_by_digest
                  ORDER BY SUM_TIMER_WAIT DESC
                  LIMIT 5",

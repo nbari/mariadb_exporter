@@ -42,6 +42,7 @@ large_stack_arrays = "deny"
 
 [dependencies]
 anyhow = "1.0"
+arc-swap = "1.8"
 axum = { version = "0.8", features = ["tracing"] }
 chrono = "0.4"
 clap = { version = "4.5", features = ["env"] }
