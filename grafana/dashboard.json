@@ -7036,7 +7036,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "**Goal**: Monitor replication lag between replica and primary\n**Action**: Value -1 = replication stopped/broken (red). Values > 60s indicate replication delays. Investigate slow queries, network issues, or high primary load.",
+          "description": "**Goal**: Monitor replication lag between replica and primary\n**Action**: Value -1 = replication stopped/broken/unknown. This panel is filtered to configured replicas only. Values > 60s indicate replication delays. Investigate slow queries, network issues, or high primary load.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -7078,7 +7078,7 @@
                     "-1": {
                       "color": "red",
                       "index": 0,
-                      "text": "REPLICATION STOPPED"
+                      "text": "REPLICATION UNKNOWN/STOPPED"
                     }
                   },
                   "type": "value"
@@ -7141,7 +7141,7 @@
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "max_over_time(mariadb_replica_seconds_behind_master_seconds{job=\"$job\", instance=\"$instance\"}[$__range])",
+              "expr": "max_over_time(mariadb_replica_seconds_behind_master_seconds{job=\"$job\", instance=\"$instance\"}[$__range]) and on(job, instance) (mariadb_replica_configured{job=\"$job\", instance=\"$instance\"} == 1)",
               "refId": "A",
               "legendFormat": "Replication Lag"
             }

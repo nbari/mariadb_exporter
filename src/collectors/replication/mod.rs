@@ -57,6 +57,28 @@ impl Collector for ReplicationCollector {
         registry.register(Box::new(self.replica_status.last_sql_errno().clone()))?;
         registry.register(Box::new(self.replica_status.master_server_id().clone()))?;
         registry.register(Box::new(self.replica_status.replica_configured().clone()))?;
+        registry.register(Box::new(
+            self.replica_status.relay_log_space_by_channel().clone(),
+        ))?;
+        registry.register(Box::new(
+            self.replica_status.relay_log_pos_by_channel().clone(),
+        ))?;
+        registry.register(Box::new(
+            self.replica_status
+                .seconds_behind_master_by_channel()
+                .clone(),
+        ))?;
+        registry.register(Box::new(self.replica_status.io_running_by_channel().clone()))?;
+        registry.register(Box::new(self.replica_status.sql_running_by_channel().clone()))?;
+        registry.register(Box::new(
+            self.replica_status.last_io_errno_by_channel().clone(),
+        ))?;
+        registry.register(Box::new(
+            self.replica_status.last_sql_errno_by_channel().clone(),
+        ))?;
+        registry.register(Box::new(
+            self.replica_status.master_server_id_by_channel().clone(),
+        ))?;
 
         // Binlog metrics
         registry.register(Box::new(self.binlog.binlog_files().clone()))?;

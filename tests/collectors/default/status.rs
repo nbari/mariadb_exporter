@@ -161,3 +161,32 @@ async fn test_global_status_collector_com_metrics() -> Result<()> {
     pool.close().await;
     Ok(())
 }
+
+#[tokio::test]
+async fn test_replication_lag_is_unknown_on_non_replica() -> Result<()> {
+    let pool = common::create_test_pool().await?;
+    let collector = StatusCollector::new();
+    let registry = Registry::new();
+
+    collector.register_metrics(&registry)?;
+    collector.collect(&pool).await?;
+
+    let metric_families = registry.gather();
+    let lag_metric = metric_families
+        .iter()
+        .find(|m| m.name() == "mariadb_slave_status_seconds_behind_master")
+        .ok_or_else(|| anyhow::anyhow!("mariadb_slave_status_seconds_behind_master missing"))?;
+
+    let value = lag_metric
+        .get_metric()
+        .first()
+        .and_then(|metric| metric.get_gauge().value)
+        .unwrap_or(0.0);
+    assert!(
+        (value + 1.0).abs() < f64::EPSILON,
+        "non-replica should report lag as -1 (unknown), got {value}"
+    );
+
+    pool.close().await;
+    Ok(())
+}

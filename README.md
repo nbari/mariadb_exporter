@@ -96,7 +96,7 @@ Collectors are toggled with `--collector.<name>` or `--no-collector.<name>`.
 * `--collector.query_response_time` – Buckets from `query_response_time` plugin.
 * `--collector.statements` – Statement digest summaries/top latency from `performance_schema`.
 * `--collector.schema` – Table size/row estimates (largest 20 non-system tables).
-* `--collector.replication` – Relay log size/pos, binlog file count.
+* `--collector.replication` – Replica role/lag/thread status, relay log size/pos, binlog file count, and per-channel replication metrics for multi-source replicas.
 * `--collector.locks` – Metadata/table lock waits from `performance_schema`.
 * `--collector.metadata` – `metadata_lock_info` table counts.
 * `--collector.userstat` – Per-user stats (requires `@@userstat=1` and `USER_STATISTICS`).
@@ -107,6 +107,11 @@ Collectors are toggled with `--collector.<name>` or `--no-collector.<name>`.
 * `exporter`
 
 Everything else is opt-in.
+
+Replication lag semantics:
+* `mariadb_slave_status_seconds_behind_master` and `mariadb_replica_seconds_behind_master_seconds` use `-1` for unknown lag (`NULL`, stopped replication, query failure, or not a replica).
+* On multi-source replicas, aggregate lag is the worst known channel lag (max), and aggregate `*_io_running` / `*_sql_running` are `1` only when all channels are running.
+* Per-channel replication metrics are exported as `mariadb_replica_*_by_channel{channel_name,connection_name}`.
 
 ### Enable all collectors
 
@@ -223,10 +228,16 @@ Run tests:
 cargo test
 ```
 
-Run with container-backed integration (requires podman):
+Run with container-backed integration (requires a container runtime):
 
 ```bash
 just test
+```
+
+If you use rootless Podman, export `DOCKER_HOST` so `testcontainers` can connect:
+
+```bash
+export DOCKER_HOST="unix:///run/user/$UID/podman/podman.sock"
 ```
 
 Test with Unix socket connection (production-like setup):

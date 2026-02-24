@@ -1,13 +1,28 @@
 use crate::collectors::Collector;
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use futures::future::BoxFuture;
 use prometheus::{IntCounter, IntGauge, Registry};
+use sqlx::mysql::MySqlRow;
 use sqlx::{MySqlPool, Row};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use tracing::{debug, info_span, instrument};
 use tracing_futures::Instrument as _;
+
+// Keep query semantics aligned with upstream mysqld_exporter:
+// try old/new forms and lock-free suffixes where supported.
+const REPLICA_STATUS_QUERY_CANDIDATES: &[&str] = &[
+    "SHOW ALL SLAVES STATUS",
+    "SHOW ALL SLAVES STATUS NONBLOCKING",
+    "SHOW ALL SLAVES STATUS NOLOCK",
+    "SHOW SLAVE STATUS",
+    "SHOW SLAVE STATUS NONBLOCKING",
+    "SHOW SLAVE STATUS NOLOCK",
+    "SHOW REPLICA STATUS",
+    "SHOW REPLICA STATUS NONBLOCKING",
+    "SHOW REPLICA STATUS NOLOCK",
+];
 
 /// Collects core `MariaDB` status/health metrics (default-on).
 #[derive(Clone)]
@@ -976,49 +991,156 @@ impl StatusCollector {
     }
 
     async fn collect_replication(&self, pool: &MySqlPool) -> Result<()> {
-        let span = info_span!(
-            "db.query",
-            db.system = "mysql",
-            db.operation = "SHOW",
-            db.statement = "SHOW SLAVE STATUS",
-            otel.kind = "client"
-        );
-
-        let rows = sqlx::query("SHOW SLAVE STATUS")
-            .fetch_all(pool)
-            .instrument(span)
-            .await?;
+        let rows = match Self::query_replica_status_rows(pool).await {
+            Ok(rows) => rows,
+            Err(e) => {
+                debug!(error = %e, "replica status not available; marking replication lag unknown");
+                self.slave_status_seconds_behind.set(-1);
+                self.slave_status_sql_running.set(0);
+                self.slave_status_io_running.set(0);
+                return Ok(());
+            }
+        };
 
         if rows.is_empty() {
-            // Not a replica; clear replica-only gauges.
-            self.slave_status_seconds_behind.set(0);
+            // Not a replica; do not report false "0 lag in sync".
+            self.slave_status_seconds_behind.set(-1);
             self.slave_status_sql_running.set(0);
             self.slave_status_io_running.set(0);
             return Ok(());
         }
 
-        // Use first row (MariaDB typically has one channel unless multi-source).
-        if let Some(row) = rows.first() {
-            let seconds: Option<i64> = row.try_get("Seconds_Behind_Master").ok();
-            let io_running: Option<String> = row.try_get("Slave_IO_Running").ok();
-            let sql_running: Option<String> = row.try_get("Slave_SQL_Running").ok();
+        let channel_states: Vec<_> = rows
+            .iter()
+            .map(|row| {
+                let lag = Self::parse_i64_from_columns(
+                    row,
+                    &["Seconds_Behind_Master", "Seconds_Behind_Source"],
+                );
+                let io_running = Self::parse_string_from_columns(
+                    row,
+                    &["Slave_IO_Running", "Replica_IO_Running"],
+                );
+                let sql_running = Self::parse_string_from_columns(
+                    row,
+                    &["Slave_SQL_Running", "Replica_SQL_Running"],
+                );
 
-            self.slave_status_seconds_behind
-                .set(seconds.unwrap_or(-1));
-            self.slave_status_io_running
-                .set(i64::from(Self::as_running(io_running.as_ref())));
-            self.slave_status_sql_running
-                .set(i64::from(Self::as_running(sql_running.as_ref())));
-        }
+                (
+                    lag,
+                    Self::as_running(io_running.as_deref()),
+                    Self::as_running(sql_running.as_deref()),
+                )
+            })
+            .collect();
+
+        let (lag, io_running, sql_running) = Self::aggregate_replica_channel_states(&channel_states);
+        self.slave_status_seconds_behind.set(lag);
+        self.slave_status_io_running.set(io_running);
+        self.slave_status_sql_running.set(sql_running);
 
         Ok(())
     }
 
-    fn as_running(val: Option<&String>) -> i32 {
-        match val.map(String::as_str) {
-            Some("Yes" | "ON" | "Running") => 1,
+    async fn query_replica_status_rows(pool: &MySqlPool) -> Result<Vec<MySqlRow>> {
+        let mut last_error = None;
+        let mut had_empty_success = false;
+
+        for query in REPLICA_STATUS_QUERY_CANDIDATES {
+            let span = info_span!(
+                "db.query",
+                db.system = "mysql",
+                db.operation = "SHOW",
+                db.statement = *query,
+                otel.kind = "client"
+            );
+
+            match sqlx::query(query).fetch_all(pool).instrument(span).await {
+                Ok(rows) => {
+                    if rows.is_empty() {
+                        had_empty_success = true;
+                        continue;
+                    }
+                    return Ok(rows);
+                }
+                Err(e) => {
+                    debug!(query, error = %e, "replica status query form not supported");
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        if had_empty_success {
+            return Ok(Vec::new());
+        }
+
+        Err(anyhow!(
+            "all replica status query forms failed: {}",
+            last_error
+                .map_or_else(|| "unknown error".to_string(), |e| e.to_string())
+        ))
+    }
+
+    fn parse_i64_from_columns(row: &MySqlRow, columns: &[&str]) -> Option<i64> {
+        for column in columns {
+            let unsigned = row.try_get::<Option<u64>, _>(*column).ok().flatten();
+            let signed = row.try_get::<Option<i64>, _>(*column).ok().flatten();
+            let text = row.try_get::<Option<String>, _>(*column).ok().flatten();
+
+            if let Some(value) = Self::parse_i64_from_values(unsigned, signed, text) {
+                return Some(value);
+            }
+        }
+
+        None
+    }
+
+    fn parse_i64_from_values(
+        unsigned: Option<u64>,
+        signed: Option<i64>,
+        text: Option<String>,
+    ) -> Option<i64> {
+        unsigned
+            .and_then(|v| i64::try_from(v).ok())
+            .or(signed)
+            .or_else(|| text.and_then(|value| value.parse::<i64>().ok()))
+    }
+
+    fn parse_string_from_columns(row: &MySqlRow, columns: &[&str]) -> Option<String> {
+        for column in columns {
+            if let Some(value) = row.try_get::<Option<String>, _>(*column).ok().flatten() {
+                return Some(value);
+            }
+        }
+
+        None
+    }
+
+    fn as_running(val: Option<&str>) -> i32 {
+        match val.map(str::to_ascii_lowercase).as_deref() {
+            Some("yes" | "on" | "running") => 1,
             _ => 0,
         }
+    }
+
+    fn aggregate_replica_channel_states(channels: &[(Option<i64>, i32, i32)]) -> (i64, i64, i64) {
+        let mut lag: Option<i64> = None;
+        let mut io_running = true;
+        let mut sql_running = true;
+
+        for (channel_lag, channel_io_running, channel_sql_running) in channels {
+            if let Some(value) = channel_lag {
+                lag = Some(lag.map_or(*value, |current| current.max(*value)));
+            }
+            io_running &= *channel_io_running == 1;
+            sql_running &= *channel_sql_running == 1;
+        }
+
+        (
+            lag.unwrap_or(-1),
+            i64::from(io_running),
+            i64::from(sql_running),
+        )
     }
 
     fn collect_binlog(&self, status: &HashMap<String, String>) {
@@ -1159,5 +1281,62 @@ impl Collector for StatusCollector {
 impl Default for StatusCollector {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StatusCollector;
+
+    #[test]
+    fn running_state_handles_common_replication_values() {
+        assert_eq!(StatusCollector::as_running(Some("Yes")), 1);
+        assert_eq!(StatusCollector::as_running(Some("ON")), 1);
+        assert_eq!(StatusCollector::as_running(Some("Running")), 1);
+        assert_eq!(StatusCollector::as_running(Some("No")), 0);
+        assert_eq!(StatusCollector::as_running(Some("Connecting")), 0);
+        assert_eq!(StatusCollector::as_running(None), 0);
+    }
+
+    #[test]
+    fn parses_unsigned_and_text_replication_numbers() {
+        assert_eq!(
+            StatusCollector::parse_i64_from_values(Some(42), None, None),
+            Some(42)
+        );
+        assert_eq!(
+            StatusCollector::parse_i64_from_values(None, Some(9), None),
+            Some(9)
+        );
+        assert_eq!(
+            StatusCollector::parse_i64_from_values(None, None, Some("13".to_string())),
+            Some(13)
+        );
+        assert_eq!(
+            StatusCollector::parse_i64_from_values(None, None, Some("x".to_string())),
+            None
+        );
+    }
+
+    #[test]
+    fn aggregate_replication_channels_uses_worst_case_semantics() {
+        let channels = vec![(Some(0), 1, 1), (Some(7), 1, 0), (None, 0, 0)];
+        let (lag, io_running, sql_running) =
+            StatusCollector::aggregate_replica_channel_states(&channels);
+
+        assert_eq!(lag, 7);
+        assert_eq!(io_running, 0);
+        assert_eq!(sql_running, 0);
+    }
+
+    #[test]
+    fn aggregate_replication_channels_reports_unknown_when_all_lag_null() {
+        let channels = vec![(None, 1, 1), (None, 1, 1)];
+        let (lag, io_running, sql_running) =
+            StatusCollector::aggregate_replica_channel_states(&channels);
+
+        assert_eq!(lag, -1);
+        assert_eq!(io_running, 1);
+        assert_eq!(sql_running, 1);
     }
 }

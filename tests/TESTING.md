@@ -41,6 +41,12 @@ just test
 just stop-containers
 ```
 
+For rootless Podman with `testcontainers`, export:
+
+```bash
+export DOCKER_HOST="unix:///run/user/$UID/podman/podman.sock"
+```
+
 ### CI Testing
 
 The CI pipeline automatically:

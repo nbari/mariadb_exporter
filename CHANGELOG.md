@@ -9,10 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **InnoDB**: Correctly sum all "OS waits" in `mariadb_innodb_semaphore_waits_total` instead of only reporting the last occurrence.
-- **Replication**: Report `-1` for `mariadb_slave_status_seconds_behind_master` when the value is `NULL` (replication stopped/broken) to avoid false sync signals.
+- **Replication**: Report `-1` for lag metrics on `NULL`/stopped/unknown/non-replica states to avoid false "0s healthy" signals on primaries or broken replicas.
+- **Replication**: Added upstream-style fallback query support for replica status collection (`SHOW ALL SLAVES STATUS`, `SHOW SLAVE STATUS`, `SHOW REPLICA STATUS` with lock-free suffixes when available).
+- **Replication**: Correctly aggregate multi-channel replica status instead of using only the first `SHOW ALL SLAVES STATUS` row.
 - **CLI**: Fixed `test_handle_action_signature` to properly test invalid DSN formats without hanging.
 - **Correctness**: Added `.reset()` calls to multiple collectors (`Tables`, `UserStat`, `Metadata`, `Statements`, `TLS`, `Version`) to prevent stale labels when entities are dropped.
 - **Robustness**: Skip setting metrics if queries fail (e.g. `Performance Schema` missing) rather than reporting misleading zero values.
+- **Tests**: Removed unsafe in-test `DOCKER_HOST` mutation to avoid cross-test environment races; container runtime selection is now process-environment driven.
 
 ### Changed
 - **Resilience**: The exporter now uses lazy database connections and a zero-minimum pool, allowing it to start even when MariaDB is unreachable.
@@ -22,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **InnoDB**: New `mariadb_innodb_semaphore_wait_time_ms_total` metric parsing individual thread wait times from `SHOW ENGINE INNODB STATUS`.
 - **Tests**: New end-to-end integration test `tests/connectivity_failure.rs` for database outage scenarios.
+- **Tests**: Strengthened primary/replica topology coverage for lag, role, and thread-state semantics; CI now requires a runtime for these tests instead of silently skipping.
+- **Tests**: Replication topology test now verifies lag progression and recovery (`STOP SLAVE SQL_THREAD` backlog phase, positive lag observation, and recovery to zero).
+- **Replication**: New per-channel metrics `mariadb_replica_*_by_channel{channel_name,connection_name}` to expose multi-source channel state without ambiguity.
 - **Tests**: Comprehensive unit tests for `CollectorRegistry` in `src/collectors/registry.rs`.
 - **Tests**: Regression tests for InnoDB semaphore parsing and metrics resetting.
 

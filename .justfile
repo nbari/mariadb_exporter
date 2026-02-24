@@ -541,7 +541,7 @@ test-socket:
 
   # Wait for MariaDB
   timeout 30 bash -c '
-    until podman exec mariadb_socket_test mariadb-admin ping -h localhost --silent 2>/dev/null; do
+    until podman exec mariadb_socket_test mariadb-admin ping -h localhost -uroot -proot --silent 2>/dev/null; do
       sleep 1
     done
   ' || {

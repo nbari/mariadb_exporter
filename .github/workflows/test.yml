@@ -155,6 +155,7 @@ jobs:
       - name: Run tests
         env:
           MARIADB_EXPORTER_DSN: mysql://root:root@127.0.0.1:3306/mysql
+          MARIADB_EXPORTER_REQUIRE_TESTCONTAINERS: "1"
         run: |
           # Runs all tests:
           # - Unit tests (143+)
