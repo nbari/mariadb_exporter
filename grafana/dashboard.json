@@ -7141,7 +7141,7 @@
                 "type": "prometheus",
                 "uid": "${DS_PROMETHEUS}"
               },
-              "expr": "max_over_time(mariadb_replica_seconds_behind_master_seconds{job=\"$job\", instance=\"$instance\"}[$__range]) and on(job, instance) (mariadb_replica_configured{job=\"$job\", instance=\"$instance\"} == 1)",
+              "expr": "mariadb_replica_seconds_behind_master_seconds{job=\"$job\", instance=\"$instance\"} and on(job, instance) (mariadb_replica_configured{job=\"$job\", instance=\"$instance\"} == 1)",
               "refId": "A",
               "legendFormat": "Replication Lag"
             }

@@ -63,14 +63,14 @@ jobs:
           RUSTDOCFLAGS: -Cinstrument-coverage -Ccodegen-units=1 -Clink-dead-code -Coverflow-checks=off
 
       - name: Install grcov
-        run: if [[ ! -e ~/.cargo/bin/grcov ]]; then cargo install grcov; fi
+        run: if [[ ! -e ~/.cargo/bin/grcov ]]; then cargo install grcov --locked; fi
 
       - name: Run grcov
         run: grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing
           --ignore '../**' --ignore '/*' -o coverage.lcov
 
       - name: Upload to codecov.io
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
