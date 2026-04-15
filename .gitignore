@@ -24,7 +24,7 @@ flycheck*.rs
 .idea/
 .vscode/
 .opencode/
-.codexrc
+.codex*
 CLAUDE.md
 
 # Python cache
