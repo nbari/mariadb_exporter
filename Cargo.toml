@@ -1,6 +1,6 @@
 [package]
 name = "mariadb_exporter"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2024"
 authors = ["Nicolas Embriz <nbari@tequila.io>"]
 description = "MariaDB metric exporter for Prometheus"
@@ -42,23 +42,23 @@ large_stack_arrays = "deny"
 
 [dependencies]
 anyhow = "1.0"
-arc-swap = "1.8"
-axum = { version = "0.8", features = ["tracing"] }
+arc-swap = "1.9.1"
+axum = { version = "0.8.9", features = ["tracing"] }
 chrono = "0.4"
-clap = { version = "4.5", features = ["env"] }
+clap = { version = "4.6.0", features = ["env"] }
 opentelemetry = "0.31.0"
-opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["grpc-tonic", "gzip-tonic", "tls", "tls-roots", "trace"] }
+opentelemetry-otlp = { version = "0.31.1", default-features = false, features = ["grpc-tonic", "gzip-tonic", "tls", "tls-roots", "trace"] }
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
 secrecy = "0.10"
 serde = "1.0"
 serde_json = "1.0"
 sqlx = { version = "0.8", features = ["mysql", "runtime-tokio", "tls-rustls"] }
-tokio = { version = "1.49", features = ["full"] }
+tokio = { version = "1.52.0", features = ["full"] }
 tower = "0.5.3"
 tower-http = { version = "0.6", features = ["request-id", "set-header", "trace"] }
 tracing = "0.1.44"
 tracing-opentelemetry = "0.32.1"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 ulid = "1.2"
 url = "2.5"
 prometheus = "0.14"
@@ -68,8 +68,8 @@ tonic = { version = "0.14", features = ["tls-native-roots"] }
 base64 = "0.22"
 tracing-futures = "0.2"
 opentelemetry-http = "0.31.0"
-once_cell = "1.21"
-sysinfo = "0.38"
+once_cell = "1.21.4"
+sysinfo = "0.38.4"
 
 [package.metadata.generate-rpm]
 assets = [
@@ -96,11 +96,11 @@ strip = true
 panic = "abort"
 
 [dev-dependencies]
-nix = { version = "0.31", features = ["user"] }
+nix = { version = "0.31.2", features = ["user"] }
 prometheus = "0.14"
 reqwest = { version = "0.13", features = ["json"] }
 serde_json = "1.0"
 temp-env = "0.3"
-testcontainers = "0.27"
+testcontainers = "0.27.2"
 testcontainers-modules = { version = "0.15", features = ["mariadb"] }
-tokio = { version = "1", features = ["full", "test-util"] }
+tokio = { version = "1.52.0", features = ["full", "test-util"] }
