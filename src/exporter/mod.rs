@@ -92,7 +92,7 @@ fn connect_pool(dsn: &SecretString) -> Result<sqlx::MySqlPool> {
     let pool = MySqlPoolOptions::new()
         .min_connections(0)
         .max_connections(3)
-        .max_lifetime(Duration::from_secs(120))
+        .max_lifetime(Duration::from_mins(2))
         .acquire_timeout(Duration::from_secs(2))
         .test_before_acquire(true)
         .connect_lazy(&db_dsn)?;
