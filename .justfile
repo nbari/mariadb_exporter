@@ -8,22 +8,26 @@ default: test
 # Test suite
 test: clippy fmt
   @echo "🧪 Checking MariaDB..."
-  @if ! podman ps --filter "name=mariadb_exporter_db" --format "{{{{.Names}}}}" | grep -q "mariadb_exporter_db"; then \
-    echo "🚀 MariaDB container not running, starting it..."; \
+  @if mariadb-admin ping -h "${MARIADB_HOST:-127.0.0.1}" -P "${MARIADB_PORT:-3306}" -u"${MARIADB_USER:-root}" -p"${MARIADB_PASS:-root}" --silent >/dev/null 2>&1; then \
+    echo "✅ MariaDB already reachable on ${MARIADB_HOST:-127.0.0.1}:${MARIADB_PORT:-3306} (using existing instance)"; \
+  elif command -v podman >/dev/null 2>&1; then \
+    echo "🚀 MariaDB not reachable, starting it with podman..."; \
     just mariadb; \
     echo "⏳ Waiting for MariaDB to be ready..."; \
     sleep 3; \
     timeout 30 bash -c 'until podman exec mariadb_exporter_db mariadb-admin ping -h "127.0.0.1" -proot --silent; do sleep 1; done' || (echo "❌ MariaDB failed to start" && exit 1); \
     echo "✅ MariaDB is ready"; \
   else \
-    echo "✅ MariaDB container is already running"; \
+    echo "❌ MariaDB not reachable on ${MARIADB_HOST:-127.0.0.1}:${MARIADB_PORT:-3306} and podman not found."; \
+    echo "   Start MariaDB yourself (e.g. run 'just mariadb' on the host)."; \
+    exit 1; \
   fi
   @echo "🧪 Running setup check..."
   @if [ -f scripts/setup-local-test-db.sh ]; then \
     scripts/setup-local-test-db.sh || (echo "❌ Test database setup failed. Fix the issues above before running tests." && exit 1); \
   fi
-  @echo "🔧 Using local test database (overriding .envrc)..."
-  MARIADB_EXPORTER_DSN="mysql://root:root@127.0.0.1:3306/mysql" cargo test -- --nocapture
+  @echo "🔧 Using local test database (honoring a pre-set MARIADB_EXPORTER_DSN)..."
+  MARIADB_EXPORTER_DSN="${MARIADB_EXPORTER_DSN:-mysql://root@127.0.0.1:3306/mysql}" cargo test -- --nocapture
 
 # Linting
 clippy:
@@ -262,6 +266,19 @@ t-deploy message="CI test": check-develop check-clean test
 # Watch for changes and run
 watch:
   cargo watch -x 'run -- --collector.default --collector.exporter --collector.tls --collector.query_response_time --collector.statements --collector.schema --collector.replication --collector.locks --collector.metadata --collector.userstat --collector.innodb -v'
+
+# Bring up the on-demand devcontainer observability stack (Prometheus + Grafana).
+# Defined behind the "observability" profile in .devcontainer/compose.yaml so a plain
+# `devpod up` (app + mariadb only) stays lean. Prometheus scrapes app:9306 by service
+# name and Grafana hot-reloads grafana/dashboard.json. Run the exporter in the app
+# container first (`just watch`). Grafana http://localhost:3001, Prometheus :9091
+# (host ports offset from 3000/9090 so this coexists with another exporter's stack).
+metrics-dev:
+  @./scripts/metrics-dev up
+
+# Stop the on-demand devcontainer observability stack (Prometheus + Grafana)
+metrics-dev-stop:
+  @./scripts/metrics-dev down
 
 # get metrics curl
 curl:

@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-07-06
+
+### Changed
+- **Ephemeral Per-Database Connections**: Replaced the dormant per-database *pool cache* in `collectors::util` (`get_or_create_pool_for_db` + a never-evicted `HashMap<String, MySqlPool>`) with an ephemeral `open_db_connection`, which opens a bare connection that is **closed on drop** and never cached. MariaDB reads every schema from the shared pool via `information_schema`, so no collector fans out per database today; this removes a latent foot-gun where a future per-database collector wired to the cached helper would have pinned one persistent connection per database and could exhaust `max_connections` on large or connection-constrained servers. The ephemeral invariant is locked by a new regression test (`tests/collectors/connection.rs`).
+
+### Added
+- **aarch64 Release Artifacts**: The release workflow now builds and publishes `aarch64` binaries/packages alongside `x86_64` — Linux static musl (`x86_64`/`aarch64-unknown-linux-musl`) and macOS (`x86_64`/`aarch64-apple-darwin`).
+- **Dev Container**: A compose-based [Dev Container](.devcontainer/README.md) (Rust `app` + `mariadb`, plus an optional Prometheus + Grafana `observability` profile). Start with `scripts/dev-up`; `just test` runs against the `mariadb` service with no host database. The `just test` recipe is now devcontainer-aware (uses an already-reachable MariaDB and honors a pre-set `MARIADB_EXPORTER_DSN`).
+- **Local Soak Harness**: `scripts/benchmark/` adds a self-contained soak/leak test (`run-soak.sh` + `check-soak.sh` + `soak-dashboard.json`) driven by `scripts/mariadb_loadtest.py` that samples the exporter's own `mariadb_exporter_process_*` metrics (RSS, open FDs, scrape counters) to catch leaks.
+- **Developer Tooling & Docs**: `scripts/install-mariadb-client.sh`, `scripts/monitor-exporter.sh`, `scripts/pre-commit-hook.sh`, `scripts/dev-up`/`dev-ssh`/`metrics-dev`, a `mise.toml` toolchain, a new `CONTRIBUTING.md`, and `.github/copilot-instructions.md`.
+
+### Dependencies
+- Updated Rust dependencies to their latest versions, including major bumps: `sqlx` 0.8 → 0.9 (adopting the `AssertSqlSafe` API for the few internally-constructed queries), the OpenTelemetry stack 0.31 → 0.32 (`opentelemetry`, `opentelemetry-otlp`, `opentelemetry_sdk`, `opentelemetry-http`), `tracing-opentelemetry` 0.32 → 0.33, `tower-http` 0.6 → 0.7, and `sysinfo` 0.38 → 0.39.
+- Bumped GitHub Actions to their latest major versions: `actions/checkout` v6 → v7, `actions/cache` v5 → v6, `codecov/codecov-action` v6 → v7.
+
+### Fixed
+- **Dashboard — Collapsed Row Alignment**: All 9 collapsed Grafana rows (Exporter Self-Monitoring, User Statistics, TLS, Statements, Schema, Replication, Locks, Metadata, Query Response Time) stored their child panels' `gridPos.y` as relative values, so Grafana misrendered them (overlapping/misaligned) when expanded. Child panels now use absolute `y` continuing from their row header, matching the intended layout.
+- **Devcontainer Observability (`metrics-dev`)**: `scripts/metrics-dev` picked an arbitrary `-app-1` container via `head -1`, so it could target the wrong compose project when another exporter's devcontainer was running. It now selects the project that has both `<project>-app-1` and this repo's `<project>-mariadb-1`. The observability stack's host ports are offset to `3001`/`9091` (in-container ports unchanged) so it coexists with another exporter's Prometheus/Grafana on `3000`/`9090`.
+
 ## [0.6.2] - 2026-04-17
 
 ### Fixed

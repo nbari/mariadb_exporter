@@ -1,0 +1,170 @@
+# Compose-based devcontainer for mariadb_exporter.
+#
+# A single compose project defines the dev container (`app`) and the one backing
+# service it needs (`mariadb`). DevPod (devcontainer.json -> dockerComposeFile)
+# brings both up together and execs into `app`, so the environment is fully
+# self-contained. The default devcontainer is tuned for local podman/docker; use
+# devcontainer.portable.json for remote providers that cannot apply local overrides.
+#
+# Inside the project network the app reaches the database by name at
+# `mariadb:3306` (container-to-container), so there is no host port-forward in the
+# path. That sidesteps the rootless-podman/pasta bulk-COPY stalls entirely.
+#
+# Trust boundary: local/dev only. MariaDB uses a well-known root password. Never
+# reuse this outside a dev machine.
+
+name: mariadb_exporter
+
+networks:
+  mariadb_exporter:
+    driver: bridge
+
+volumes:
+  mariadb-data:
+  cargo-registry:
+  cargo-git:
+  cargo-target:
+  rustup:
+  mise-data:
+  mise-cache:
+  # Persist Neovim plugins / treesitter / state across rebuilds so a recreate does
+  # not re-download everything (the config itself comes from the chezmoi dotfiles).
+  nvim-data:
+  nvim-state:
+  nvim-cache:
+  # Observability profile (on-demand) persistence.
+  prometheus-data:
+
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/rust:trixie
+    init: true
+    user: vscode
+    # Disable SELinux labeling for bind mounts (clean on fedora-atomic / rootless
+    # podman) instead of per-mount :Z.
+    security_opt:
+      - label=disable
+    # Keep the dev container alive; DevPod execs in and runs lifecycle hooks.
+    command: sleep infinity
+    environment:
+      DEVPOD: "true"
+      DEVPOD_WORKSPACE_ID: mariadb_exporter
+      EDITOR: nvim
+      VISUAL: nvim
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      CARGO_HOME: /home/vscode/.cargo
+      # Target dir is a SUBDIR of the mounted volume so `cargo clean` can remove
+      # it (removing the volume mount point itself fails with EBUSY).
+      CARGO_TARGET_DIR: /home/vscode/.cargo/target/build
+      MISE_DATA_DIR: /home/vscode/.local/share/mise
+      MISE_CACHE_DIR: /home/vscode/.cache/mise
+      MISE_CONFIG_DIR: /home/vscode/.config/mise
+      MISE_CONFIG_FILE: /workspaces/mariadb_exporter/mise.toml
+      # The justfile/tests honor these; pointing them at the mariadb service is
+      # what makes `just test` work in-container with no host database. The DB is a
+      # trusted, disposable compose sibling reachable as `mariadb` (not localhost).
+      MARIADB_HOST: mariadb
+      MARIADB_PORT: "3306"
+      MARIADB_USER: root
+      MARIADB_PASS: root
+      # Root over TCP requires the password (root@'%'); a passwordless DSN is
+      # rejected, so the DSN embeds it here.
+      MARIADB_EXPORTER_DSN: mysql://root:root@mariadb:3306/mysql
+    volumes:
+      - ..:/workspaces/mariadb_exporter
+      - cargo-registry:/home/vscode/.cargo/registry
+      - cargo-git:/home/vscode/.cargo/git
+      - cargo-target:/home/vscode/.cargo/target
+      - rustup:/home/vscode/.rustup
+      - mise-data:/home/vscode/.local/share/mise
+      - mise-cache:/home/vscode/.cache/mise
+      - nvim-data:/home/vscode/.local/share/nvim
+      - nvim-state:/home/vscode/.local/state/nvim
+      - nvim-cache:/home/vscode/.cache/nvim
+    networks:
+      mariadb_exporter:
+        aliases:
+          - app
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+  mariadb:
+    image: docker.io/library/mariadb:11.4
+    security_opt:
+      - label=disable
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      # Allow root to authenticate from any host in the compose network (the app
+      # container appears as a remote host, not localhost).
+      MARIADB_ROOT_HOST: "%"
+      MARIADB_DATABASE: mysql
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -proot --silent"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+    restart: unless-stopped
+    networks:
+      - mariadb_exporter
+  # ---------------------------------------------------------------------------
+  # Optional observability stack (Prometheus + Grafana) for dashboard work.
+  # On-demand: gated behind the "observability" profile, so a plain `devpod up`
+  # (which starts only app + mariadb) stays lean. Bring it up with:
+  #   just metrics-dev
+  #   # or: <podman|docker> compose -f .devcontainer/compose.yaml --profile observability up -d
+  # Prometheus scrapes the exporter at app:9306 over the compose network, so run
+  # the exporter inside the app container first (e.g. `just watch`). Grafana
+  # hot-reloads grafana/dashboard.json (file provider, ~10s) — no rebuild needed.
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: docker.io/prom/prometheus:latest
+    profiles: ["observability"]
+    security_opt:
+      - label=disable
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      # Host port offset (9091) so this coexists with another exporter's
+      # devcontainer Prometheus on 9090. In-container port stays 9090.
+      - "9091:9090"
+    networks:
+      - mariadb_exporter
+
+  grafana:
+    image: docker.io/grafana/grafana:latest
+    profiles: ["observability"]
+    security_opt:
+      - label=disable
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_SECURITY_DISABLE_LOGIN_FORM: "true"
+      GF_USERS_DEFAULT_THEME: dark
+    volumes:
+      # Datasource -> the prometheus sibling service.
+      - ./grafana-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+      # Dashboard provider (allowUiUpdates=false, updateIntervalSeconds: 10) + the
+      # dashboard JSON, bind-mounted from the repo so edits hot-reload without a
+      # rebuild. The file is authoritative.
+      - ./grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/mariadb_exporter.yml:ro
+      - ../grafana/dashboard.json:/etc/grafana/provisioning/dashboards/dashboard.json:ro
+    # No grafana-data volume: Grafana state is fully provisioned from the files above,
+    # so keeping it ephemeral guarantees every start re-reads the dashboard from disk
+    # (a persisted volume can otherwise serve a stale, UI-saved copy).
+    ports:
+      # Host port offset (3001) so this coexists with another exporter's
+      # devcontainer Grafana on 3000. In-container port stays 3000.
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - mariadb_exporter

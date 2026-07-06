@@ -1,4 +1,5 @@
 pub mod common;
+pub mod connection;
 pub mod default;
 pub mod innodb;
 pub mod locks;

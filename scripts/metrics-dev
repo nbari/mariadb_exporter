@@ -1,0 +1,74 @@
+#!/usr/bin/env sh
+set -eu
+
+# On-demand Prometheus + Grafana for the running mariadb_exporter devcontainer.
+#
+# The observability services live in .devcontainer/compose.yaml behind the
+# "observability" profile, so a plain `devpod up` (app + mariadb only) stays lean.
+# This script attaches them to the SAME compose network DevPod created, so
+# Prometheus scrapes the exporter by service name (app:9306) with no host
+# networking — identical on macOS / Linux / Atomic.
+#
+# Run the exporter inside the app container first so app:9306 is up (e.g. `just watch`).
+#
+# Usage: scripts/metrics-dev [up|down]
+
+action="${1:-up}"
+
+cmd="${MARIADB_EXPORTER_CONTAINER_CMD:-}"
+if [ -z "$cmd" ]; then
+    if command -v podman >/dev/null 2>&1; then
+        cmd=podman
+    else
+        cmd=docker
+    fi
+fi
+
+project_dir="$(
+    unset CDPATH
+    cd -- "$(dirname -- "$0")/.." && pwd
+)"
+compose_file="$project_dir/.devcontainer/compose.yaml"
+
+# DevPod overrides the compose `name:` with its own project, so discover the real
+# project name from the running containers. When several devcontainers run at once
+# (e.g. another exporter's), matching only `-app-1` is ambiguous — so pick the
+# project that has BOTH an `-app-1` and this repo's `-mariadb-1` service.
+project=""
+for app_ctr in $("$cmd" ps --format '{{.Names}}' 2>/dev/null | grep -E -- '-app-1$'); do
+    proj="${app_ctr%-app-1}"
+    if "$cmd" ps --format '{{.Names}}' 2>/dev/null | grep -qE "^${proj}-mariadb-1$"; then
+        project="$proj"
+        break
+    fi
+done
+if [ -z "$project" ]; then
+    echo "Error: mariadb_exporter devcontainer not running" >&2
+    echo "  (looked for a compose project with both '<project>-app-1' and '<project>-mariadb-1')." >&2
+    echo "Start the workspace first:  ./scripts/dev-up" >&2
+    exit 1
+fi
+
+case "$action" in
+up)
+    echo "Using compose project: $project"
+    "$cmd" compose -p "$project" -f "$compose_file" --profile observability up -d prometheus grafana
+    echo ""
+    echo "  Grafana:    http://localhost:3001   (anonymous admin)"
+    echo "  Prometheus: http://localhost:9091"
+    echo ""
+    echo "  Host ports are offset (3001/9091) so this stack coexists with another"
+    echo "  exporter's devcontainer observability stack on 3000/9090."
+    echo "  Prometheus scrapes app:9306 over the compose network. Run the exporter"
+    echo "  inside the app container so it has data to scrape:  just watch"
+    echo "  Edits to grafana/dashboard.json hot-reload in Grafana within ~10s."
+    ;;
+down | stop)
+    echo "Using compose project: $project"
+    "$cmd" compose -p "$project" -f "$compose_file" --profile observability stop prometheus grafana
+    ;;
+*)
+    echo "usage: $0 [up|down]" >&2
+    exit 1
+    ;;
+esac

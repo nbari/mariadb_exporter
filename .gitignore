@@ -17,6 +17,9 @@ flycheck*.rs
 /tests/tmp/
 *.db
 
+# benchmark / soak artifacts
+/bench-artifacts/
+
 # Ai tools
 .claude/
 .copilot/

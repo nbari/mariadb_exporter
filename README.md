@@ -23,6 +23,11 @@ Install via Cargo:
 cargo install mariadb_exporter
 ```
 
+Or grab a prebuilt binary, `.deb`, or `.rpm` from the
+[GitHub Releases](https://github.com/nbari/mariadb_exporter/releases) — built for
+Linux (`x86_64` and `aarch64`, static musl) and macOS (`x86_64` and `aarch64`).
+Container images (`linux/amd64`, `linux/arm64`) are published to `ghcr.io`.
+
 ## Usage
 
 ### Recommended Setup (Secure)
@@ -222,6 +227,11 @@ Each collector lives in its own subdirectory for clarity and easy extension.
 
 ## Testing
 
+> **Zero-setup option:** the repo ships a compose-based
+> [Dev Container](.devcontainer/README.md) (Rust + MariaDB, plus an optional
+> Prometheus + Grafana profile). With [DevPod](https://devpod.sh): `scripts/dev-up`,
+> then `just test` inside — no host database needed.
+
 Run tests:
 
 ```bash
@@ -265,6 +275,14 @@ just test-socket
 ```
 
 ## Developer Guidelines
+
+See the [Development Guide (CONTRIBUTING.md)](CONTRIBUTING.md) for the full local
+workflow, safe-coding rules, and the pre-commit hook. Additional tooling:
+
+- **[.devcontainer/](.devcontainer/README.md)** — one-command Rust + MariaDB dev
+  environment (+ optional Prometheus/Grafana via `just metrics-dev`).
+- **[scripts/benchmark/](scripts/benchmark/README.md)** — self-contained local
+  soak/leak harness (`run-soak.sh` + `check-soak.sh`) driven by `mariadb_loadtest.py`.
 
 ### Architecture
 

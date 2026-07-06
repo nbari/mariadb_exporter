@@ -379,7 +379,9 @@ async fn configure_replica_from_master(
         MASTER_LOG_FILE = '{binlog_file}', \
         MASTER_LOG_POS = {binlog_pos}"
     );
-    sqlx::query(&change_master).execute(replica_pool).await?;
+    sqlx::query(sqlx::AssertSqlSafe(change_master.as_str()))
+        .execute(replica_pool)
+        .await?;
     sqlx::query("START SLAVE").execute(replica_pool).await?;
 
     let (master_id, last_status) = wait_for_master_id(replica_pool).await?;
@@ -705,7 +707,9 @@ async fn set_replica_master_delay(
 ) -> anyhow::Result<()> {
     sqlx::query("STOP SLAVE").execute(replica_pool).await?;
     let change_master = format!("CHANGE MASTER TO MASTER_DELAY = {delay_seconds}");
-    sqlx::query(&change_master).execute(replica_pool).await?;
+    sqlx::query(sqlx::AssertSqlSafe(change_master.as_str()))
+        .execute(replica_pool)
+        .await?;
     sqlx::query("START SLAVE").execute(replica_pool).await?;
     wait_for_replica_threads_state(replica_pool, "Yes").await
 }

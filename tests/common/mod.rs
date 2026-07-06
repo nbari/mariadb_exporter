@@ -88,13 +88,10 @@ pub async fn plugin_installed(pool: &MySqlPool, plugin_name: &str) -> Result<boo
 /// Check if a variable is enabled
 #[allow(dead_code)]
 pub async fn variable_enabled(pool: &MySqlPool, variable_name: &str) -> Result<bool> {
-    let result: Option<(String,)> = sqlx::query_as(
-        "SELECT @@GLOBAL.{} AS value"
-            .replace("{}", variable_name)
-            .as_str(),
-    )
-    .fetch_optional(pool)
-    .await?;
+    let sql = "SELECT @@GLOBAL.{} AS value".replace("{}", variable_name);
+    let result: Option<(String,)> = sqlx::query_as(sqlx::AssertSqlSafe(sql))
+        .fetch_optional(pool)
+        .await?;
 
     if let Some((value,)) = result {
         Ok(value.eq_ignore_ascii_case("ON") || value == "1")
@@ -106,7 +103,7 @@ pub async fn variable_enabled(pool: &MySqlPool, variable_name: &str) -> Result<b
 /// Execute a query and ignore errors (useful for cleanup)
 #[allow(dead_code)]
 pub async fn execute_ignore_error(pool: &MySqlPool, query: &str) {
-    let _ = sqlx::query(query).execute(pool).await;
+    let _ = sqlx::query(sqlx::AssertSqlSafe(query)).execute(pool).await;
 }
 
 /// Get `MariaDB` version

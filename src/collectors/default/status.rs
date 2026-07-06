@@ -1055,7 +1055,7 @@ impl StatusCollector {
                 otel.kind = "client"
             );
 
-            match sqlx::query(query).fetch_all(pool).instrument(span).await {
+            match sqlx::query(*query).fetch_all(pool).instrument(span).await {
                 Ok(rows) => {
                     if rows.is_empty() {
                         had_empty_success = true;
