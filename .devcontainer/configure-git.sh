@@ -5,6 +5,18 @@ set -eu
 # contributors can use their own dotfiles or git config without this script
 # overwriting anything unless the corresponding environment variable is present.
 
+# Fallback: if the forwarded env vars aren't present (e.g. the host had no
+# direnv-loaded .envrc when dev-up ran), source the workspace .envrc directly. It
+# holds plain `export GIT_USER_NAME/GIT_USER_EMAIL/GIT_SIGNING_KEY` lines, so this
+# makes the container's git identity self-sufficient without direnv.
+if [ "${GIT_USER_NAME:-}" = "" ]; then
+    _envrc="$(unset CDPATH; cd -- "$(dirname -- "$0")/.." 2>/dev/null && pwd)/.envrc"
+    if [ -f "$_envrc" ]; then
+        # shellcheck disable=SC1090
+        . "$_envrc" 2>/dev/null || true
+    fi
+fi
+
 if [ "${GIT_USER_NAME:-}" != "" ]; then
     git config --global --replace-all user.name "$GIT_USER_NAME"
 fi
