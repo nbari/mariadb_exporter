@@ -1,17 +1,16 @@
 //! Shared utilities for collectors:
 //! - Global, read-only exclusion list of databases (set once at startup).
 //! - Parsed base connection options derived from the DSN to build per-database connections.
-//! - Cached tiny pools per non-default database (reuse across scrapes).
+//! - Ephemeral per-database connections (opened per query, closed on drop — never cached).
 
 use anyhow::{Result, anyhow};
 use arc_swap::ArcSwap;
 use once_cell::sync::OnceCell;
 use regex::Regex;
 use secrecy::{ExposeSecret, SecretString};
-use sqlx::MySqlPool;
-use sqlx::mysql::{MySqlConnectOptions, MySqlPoolOptions};
-use std::{collections::HashMap, str::FromStr, sync::Arc};
-use tokio::sync::RwLock;
+use sqlx::Connection;
+use sqlx::mysql::{MySqlConnectOptions, MySqlConnection};
+use std::{str::FromStr, sync::Arc};
 use url::Url;
 
 /// Global holder for excluded databases, set once at startup via CLI/env.
@@ -22,9 +21,6 @@ static BASE_OPTS: OnceCell<MySqlConnectOptions> = OnceCell::new();
 
 /// Default database name parsed from DSN.
 static DEFAULT_DB: OnceCell<String> = OnceCell::new();
-
-/// Cache of per-database tiny pools (only for non-default DBs).
-static POOLS: OnceCell<tokio::sync::RwLock<HashMap<String, MySqlPool>>> = OnceCell::new();
 
 /// `MariaDB` version number (e.g., `100_400` for v10.4).
 static MARIADB_VERSION: OnceCell<ArcSwap<i32>> = OnceCell::new();
@@ -147,7 +143,7 @@ fn parse_database_from_dsn(dsn: &SecretString) -> Option<String> {
 }
 
 /// Initialize (idempotent) the base connect options from the provided DSN (`SecretString`).
-/// Also records the default database name and initializes the pool cache.
+/// Also records the default database name.
 ///
 /// # Errors
 ///
@@ -159,10 +155,6 @@ pub fn set_base_connect_options_from_dsn(dsn: &SecretString) -> Result<()> {
 
         let dbname = parse_database_from_dsn(dsn).unwrap_or_else(|| "mysql".to_string());
         let _ = DEFAULT_DB.set(dbname);
-    }
-
-    if POOLS.get().is_none() {
-        let _ = POOLS.set(RwLock::new(HashMap::new()));
     }
 
     Ok(())
@@ -186,46 +178,35 @@ pub fn connect_options_for_db(datname: &str) -> Result<MySqlConnectOptions> {
     Ok(base.database(datname))
 }
 
-/// Get (or create) a tiny pool for the specified database. Only used for non-default DBs.
-/// The default DB should reuse the shared pool created at startup.
+/// Open a fresh connection to the specified non-default database.
+///
+/// Connections are intentionally **not** pooled or cached: the caller runs a single scrape
+/// query and drops the connection, which closes it. This keeps the exporter's per-database
+/// connection footprint bounded and independent of the number of databases, instead of
+/// pinning one persistent connection per database (which would exhaust `max_connections` on
+/// large or connection-constrained clusters). The default database must use the shared pool
+/// created at startup.
+///
+/// `MariaDB` collectors generally read every schema from the shared connection via
+/// `information_schema`, so this helper exists for the rare collector that must run a query
+/// *in the context of* another database. If you add such a collector, use this (ephemeral)
+/// helper — never reintroduce a per-database pool/connection cache.
 ///
 /// # Errors
 ///
-/// Returns an error if pool creation or connection fails
-pub async fn get_or_create_pool_for_db(datname: &str) -> Result<MySqlPool> {
+/// Returns an error if called for the default database, or if the connection fails.
+pub async fn open_db_connection(datname: &str) -> Result<MySqlConnection> {
     if let Some(def) = get_default_database()
         && def == datname
     {
         return Err(anyhow!(
-            "get_or_create_pool_for_db called for default database; use shared pool"
+            "open_db_connection called for default database; use shared pool"
         ));
     }
 
-    let pools = POOLS.get().ok_or_else(|| {
-        anyhow!("Pool cache not initialized; call set_base_connect_options_from_dsn()")
-    })?;
-
-    {
-        let guard = pools.read().await;
-        if let Some(pool) = guard.get(datname) {
-            return Ok(pool.clone());
-        }
-    }
-
     let opts = connect_options_for_db(datname)?;
-    let pool = MySqlPoolOptions::new()
-        .max_connections(1)
-        .min_connections(0)
-        .acquire_timeout(std::time::Duration::from_secs(5))
-        .connect_with(opts)
-        .await?;
-
-    {
-        let mut guard = pools.write().await;
-        guard.insert(datname.to_string(), pool.clone());
-    }
-
-    Ok(pool)
+    let conn = MySqlConnection::connect_with(&opts).await?;
+    Ok(conn)
 }
 
 #[cfg(test)]

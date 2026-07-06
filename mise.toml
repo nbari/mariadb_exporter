@@ -1,0 +1,39 @@
+# mise toolchain for mariadb_exporter. Primarily used by the devcontainer
+# (.devcontainer/postcreate.sh runs `mise install`), but works on any host too:
+#
+#   mise install            # install the tools below
+#   mise run setup-mariadb-client
+#
+# Host users who don't use mise are unaffected — the project still builds with a
+# plain `cargo` + `just` install and CI does not depend on mise.
+
+[settings]
+cargo.binstall = true
+minimum_release_age = "0"
+
+[tools]
+"cargo:cargo-edit" = "latest"
+"cargo:cargo-watch" = "latest"
+"github:nbari/slick" = "latest"
+bat = "latest"
+go = "latest"
+just = "latest"
+node = "lts"
+ripgrep = "latest"
+tree-sitter = "latest"
+eza = "latest"
+tmux = "latest"
+uv = "latest"
+python = "3.14"
+
+[env]
+EDITOR = "nvim"
+VISUAL = "nvim"
+
+[tasks.setup-mariadb-client]
+run = "bash {{config_root}}/scripts/install-mariadb-client.sh"
+description = "Install the MariaDB client (mariadb + mariadb-admin)"
+
+[tasks.setup-tig]
+run = "sudo apt install -y tig"
+description = "Install tig git browser"

@@ -81,7 +81,7 @@ impl TablesCollector {
              LIMIT 20"
         );
 
-        let rows = sqlx::query_as::<_, (String, String, u64, u64)>(&query)
+        let rows = sqlx::query_as::<_, (String, String, u64, u64)>(sqlx::AssertSqlSafe(query))
             .fetch_all(pool)
             .instrument(span)
             .await?;

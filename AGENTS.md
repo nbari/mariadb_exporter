@@ -16,6 +16,10 @@
 - `cargo clippy --all-targets --all-features` – lint; required before commits.
 - `cargo fmt --all -- --check` – enforce formatting.
 - `just validate-dashboard` – validate Grafana JSON before pushing.
+- `scripts/dev-up` – start the compose-based [Dev Container](.devcontainer/README.md) (Rust + MariaDB, optional Prometheus + Grafana); run `just test` inside.
+- `just metrics-dev` / `just metrics-dev-stop` – on-demand Prometheus + Grafana for the devcontainer (scrapes `app:9306`, hot-reloads `grafana/dashboard.json`).
+- `scripts/benchmark/run-soak.sh` – self-contained local soak/leak test driven by `scripts/mariadb_loadtest.py`; inspect with `scripts/benchmark/check-soak.sh`.
+- `scripts/install-mariadb-client.sh` – install the `mariadb`/`mariadb-admin` client used by the helper scripts.
 
 ## Coding Style & Naming Conventions
 - Rust 2021 defaults: 4-space indentation, `snake_case` modules/functions, `CamelCase` types, `SCREAMING_SNAKE_CASE` consts.
@@ -42,3 +46,11 @@
 - Prefer Unix socket DSNs for local testing: `mysql:///mysql?socket=/var/run/mysqld/mysqld.sock&user=exporter`.
 - Limit privileges when creating test users; reuse `scripts/setup-exporter-user.sql` when applicable.
 - When adding collectors, ensure optional paths fail closed (no panic) when prerequisites are missing.
+
+## Dev Container & Local Tooling
+- A compose-based dev container lives in `.devcontainer/` (Rust `app` + `mariadb` service, plus an optional `observability` profile with Prometheus + Grafana). Start it with `scripts/dev-up` (DevPod) and enter with `scripts/dev-ssh`; inside, `just test` runs against the `mariadb` service with no host database. See [`.devcontainer/README.md`](.devcontainer/README.md).
+- The `just test` recipe is devcontainer-aware: it uses an already-reachable MariaDB at `MARIADB_HOST:MARIADB_PORT` (default `127.0.0.1:3306`) and only starts a podman container when none is reachable. It honors a pre-set `MARIADB_EXPORTER_DSN`, falling back to the local default when unset.
+- Connection model: MariaDB reads every schema from a **single shared `MySqlPool`** via `information_schema`/`performance_schema`. There is no per-database/per-schema connection fan-out. For the rare per-database query, use the ephemeral `util::open_db_connection` (closed on drop, never cached) — do not add a per-database connection/pool cache. This invariant is locked by `tests/collectors/connection.rs`.
+- `scripts/benchmark/` holds a self-contained local soak harness (`run-soak.sh` + `check-soak.sh` + `soak-dashboard.json`) driven by `scripts/mariadb_loadtest.py`; it samples the exporter's own `mariadb_exporter_process_*` metrics to catch RSS/FD leaks.
+- Contributor workflow, safe-coding rules, and the pre-commit hook are documented in [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`.github/copilot-instructions.md`](.github/copilot-instructions.md).
+- The release flow signs tags (`git tag -s`); do not bypass configured commit/tag signing with `--no-gpg-sign`.
