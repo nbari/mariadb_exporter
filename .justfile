@@ -129,7 +129,8 @@ _bump bump_kind: check-develop check-clean clean update test
         status=$?
         if [ $status -ne 0 ]; then
             echo "↩️  Restoring version files after failure..."
-            git checkout -- Cargo.toml Cargo.lock >/dev/null 2>&1 || true
+            rm -f grafana/dashboard.json.tmp
+            git checkout -- Cargo.toml Cargo.lock grafana/dashboard.json >/dev/null 2>&1 || true
         fi
         exit $status
     }
@@ -176,15 +177,19 @@ _bump bump_kind: check-develop check-clean clean update test
     echo "🧹 Running clean build..."
     cargo clean
 
-    echo "🧪 Running tests with new version (via just test)..."
-    just test
-
+    # Stamp the dashboard BEFORE running the tests: `dashboard_is_tagged_with_the_crate_version`
+    # compares grafana/dashboard.json against CARGO_PKG_VERSION, which `cargo set-version`
+    # has already bumped above, so stamping afterwards would fail the very suite that
+    # gates the release.
     echo "📊 Updating Grafana dashboard version to ${new_version}..."
     jq --arg ver "${new_version}" '
       .tags = ((.tags // []) | map(select(test("^[0-9]+\\.[0-9]+\\.[0-9]+") | not))) + [$ver] |
       .version = .version + 1
     ' grafana/dashboard.json > grafana/dashboard.json.tmp
     mv grafana/dashboard.json.tmp grafana/dashboard.json
+
+    echo "🧪 Running tests with new version (via just test)..."
+    just test
 
     git add .
     git commit -m "bump version to ${new_version}"

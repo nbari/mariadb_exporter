@@ -156,15 +156,18 @@ fn read_rss_bytes(pid: u32, page_size: u64) -> Option<u64> {
 }
 
 /// Samples every `mariadbd`/`mysqld` process on Linux by reading `/proc` directly.
+///
+/// Returns `None` when the process table itself could not be read. That is
+/// deliberately distinct from `Some(vec![])`: an empty vector means "the host was
+/// read and no server process is running here", while `None` means "the source is
+/// unreadable", which must never be published as a factual zero.
 #[cfg(target_os = "linux")]
-fn sample_processes() -> Vec<ProcSample> {
+fn sample_processes() -> Option<Vec<ProcSample>> {
     let hz = clk_tck();
     let bytes_per_page = page_size();
     let mut out = Vec::new();
 
-    let Ok(entries) = std::fs::read_dir("/proc") else {
-        return out;
-    };
+    let entries = std::fs::read_dir("/proc").ok()?;
 
     for entry in entries.flatten() {
         let file_name = entry.file_name();
@@ -195,13 +198,16 @@ fn sample_processes() -> Vec<ProcSample> {
         });
     }
 
-    out
+    Some(out)
 }
 
 /// Samples every `mariadbd`/`mysqld` process on FreeBSD via `sysinfo`. There is
 /// no cheap PSS, so memory is RSS (`Process::memory`).
+///
+/// Always returns `Some`: `sysinfo` reports an empty process list rather than a
+/// read failure, so there is no unreadable-source case to distinguish here.
 #[cfg(target_os = "freebsd")]
-fn sample_processes(system: &Mutex<System>) -> Vec<ProcSample> {
+fn sample_processes(system: &Mutex<System>) -> Option<Vec<ProcSample>> {
     use sysinfo::{ProcessRefreshKind, ProcessesToUpdate};
 
     let mut system = match system.lock() {
@@ -232,7 +238,7 @@ fn sample_processes(system: &Mutex<System>) -> Vec<ProcSample> {
         });
     }
 
-    out
+    Some(out)
 }
 
 /// Aggregate host CPU and memory for the `MariaDB` server process group.
@@ -255,6 +261,9 @@ pub struct ProcessGroupCollector {
     system: Arc<Mutex<System>>,
     /// Ensures the "unsupported platform" warning is logged at most once.
     unsupported_warned: Arc<AtomicBool>,
+    /// Ensures the "unreadable process table" warning is logged at most once
+    /// rather than on every scrape.
+    unreadable_warned: Arc<AtomicBool>,
 }
 
 impl Default for ProcessGroupCollector {
@@ -310,6 +319,7 @@ impl ProcessGroupCollector {
             #[cfg(target_os = "freebsd")]
             system: Arc::new(Mutex::new(System::new())),
             unsupported_warned: Arc::new(AtomicBool::new(false)),
+            unreadable_warned: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -325,11 +335,33 @@ impl ProcessGroupCollector {
         }
 
         #[cfg(target_os = "linux")]
-        let samples = sample_processes();
+        let observed = sample_processes();
         #[cfg(target_os = "freebsd")]
-        let samples = sample_processes(&self.system);
+        let observed = sample_processes(&self.system);
         #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
-        let samples: Vec<ProcSample> = Vec::new();
+        let observed: Option<Vec<ProcSample>> = None;
+
+        self.apply_samples(observed);
+    }
+
+    /// Publishes a process-group snapshot.
+    ///
+    /// `None` means the process table could not be read and preserves the last good
+    /// snapshot, matching the `Err` half of the settlement contract. Publishing zeros
+    /// there would claim "MariaDB is using no CPU or memory", which is a factual
+    /// assertion the exporter cannot make when it could not read the source at all.
+    /// `Some(vec![])` is different: the host was read and no server process runs here,
+    /// so an honest zero is published.
+    fn apply_samples(&self, observed: Option<Vec<ProcSample>>) {
+        let Some(samples) = observed else {
+            if !self.unreadable_warned.swap(true, Ordering::Relaxed) {
+                warn!(
+                    "collector.system could not read the host process table; MariaDB \
+                     process-group metrics keep their last good values"
+                );
+            }
+            return;
+        };
 
         let mut prev = match self.prev_cpu.lock() {
             Ok(guard) => guard,
@@ -558,6 +590,60 @@ mod tests {
         assert!(
             second >= first,
             "group CPU counter must be monotonic: {second} < {first}"
+        );
+    }
+
+    #[test]
+    fn unreadable_process_table_preserves_the_last_good_snapshot() {
+        let collector = ProcessGroupCollector::new();
+
+        collector.apply_samples(Some(vec![ProcSample {
+            pid: 4242,
+            cpu_seconds: 12.0,
+            mem_bytes: 3_000_000,
+        }]));
+        let mem_before = collector.memory_bytes.with_label_values(&[GROUP]).get();
+        let count_before = collector.proc_count.with_label_values(&[GROUP]).get();
+        assert_eq!(mem_before, 3_000_000);
+        assert_eq!(count_before, 1);
+
+        // An unreadable process table must not claim "MariaDB is using nothing".
+        collector.apply_samples(None);
+
+        assert_eq!(
+            collector.memory_bytes.with_label_values(&[GROUP]).get(),
+            mem_before,
+            "unreadable process table must preserve memory, not publish 0"
+        );
+        assert_eq!(
+            collector.proc_count.with_label_values(&[GROUP]).get(),
+            count_before,
+            "unreadable process table must preserve count, not publish 0"
+        );
+    }
+
+    #[test]
+    fn readable_host_with_no_server_process_publishes_an_honest_zero() {
+        let collector = ProcessGroupCollector::new();
+
+        collector.apply_samples(Some(vec![ProcSample {
+            pid: 4242,
+            cpu_seconds: 12.0,
+            mem_bytes: 3_000_000,
+        }]));
+
+        // Distinct from `None`: the host *was* read and no server process runs here.
+        collector.apply_samples(Some(Vec::new()));
+
+        assert_eq!(
+            collector.proc_count.with_label_values(&[GROUP]).get(),
+            0,
+            "a readable host with no server process is an honest zero"
+        );
+        assert_eq!(
+            collector.memory_bytes.with_label_values(&[GROUP]).get(),
+            0,
+            "a readable host with no server process reports zero memory"
         );
     }
 }
