@@ -9482,7 +9482,7 @@
           "type": "timeseries"
         }
       ],
-      "title": "Host CPU / Memory (requires --collector.system, co-located only \u2014 not RDS/SkySQL)",
+      "title": "Host CPU / Memory (requires --collector.system, co-located only — not RDS/SkySQL)",
       "type": "row",
       "description": "Host-level CPU and memory for the machine running pg_exporter, from --collector.system (Linux/FreeBSD). Reads only the OS (/proc/stat, sysctls, sysinfo) and never queries MariaDB. Only meaningful when the exporter is co-located with the database server; on managed services (RDS/Aurora) these numbers describe the exporter's host, not the DB."
     },
@@ -10432,7 +10432,7 @@
     "mariadb_exporter",
     "monitoring",
     "mysql",
-    "0.8.0"
+    "0.7.0"
   ],
   "templating": {
     "list": [
@@ -10554,5 +10554,5 @@
   "timezone": "",
   "title": "MariaDB Monitoring Dashboard",
   "uid": "mariadb-comprehensive",
-  "version": 2
+  "version": 1
 }
