@@ -10432,7 +10432,7 @@
     "mariadb_exporter",
     "monitoring",
     "mysql",
-    "0.7.0"
+    "0.8.0"
   ],
   "templating": {
     "list": [
@@ -10554,5 +10554,5 @@
   "timezone": "",
   "title": "MariaDB Monitoring Dashboard",
   "uid": "mariadb-comprehensive",
-  "version": 1
+  "version": 2
 }
