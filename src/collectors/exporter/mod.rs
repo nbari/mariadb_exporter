@@ -4,7 +4,7 @@ mod scraper;
 pub use process::ProcessCollector;
 pub use scraper::{ScrapeTimer, ScraperCollector};
 
-use crate::collectors::Collector;
+use crate::collectors::{Collected, Collector};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -78,12 +78,14 @@ impl Collector for ExporterCollector {
     }
 
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "exporter", otel.kind = "internal"))]
-    fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
             let mut tasks = FuturesUnordered::new();
 
             for sub in &self.subs {
                 let span = info_span!("collector.collect", sub_collector = %sub.name(), otel.kind = "internal");
+                // The safe `collect` settles each sub independently, so one skipped child
+                // cannot clear a sibling that just published.
                 tasks.push(sub.collect(pool).instrument(span));
             }
 
@@ -91,8 +93,15 @@ impl Collector for ExporterCollector {
                 res?;
             }
 
-            Ok(())
+            Ok(Collected::Fresh)
         })
+    }
+
+    /// Fans out to the sub-collectors; this umbrella owns no metrics itself.
+    fn reset_metrics(&self) {
+        for sub in &self.subs {
+            sub.reset_metrics();
+        }
     }
 
     fn enabled_by_default(&self) -> bool {

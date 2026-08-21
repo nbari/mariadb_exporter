@@ -139,3 +139,123 @@ fn dashboard_has_exporter_self_monitoring_row() {
         "Dashboard should have an 'Exporter Self-Monitoring' row"
     );
 }
+
+#[test]
+fn dashboard_has_host_system_row() {
+    let dashboard = load_dashboard();
+
+    let row = dashboard
+        .get("panels")
+        .and_then(Value::as_array)
+        .and_then(|panels| {
+            panels.iter().find(|panel| {
+                panel["type"] == "row"
+                    && panel
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .is_some_and(|title| title.contains("--collector.system"))
+            })
+        });
+
+    let Some(row) = row else {
+        panic!("Dashboard should have a host CPU/memory row for --collector.system");
+    };
+
+    // The collector is opt-in and only truthful when co-located with MariaDB, so the row
+    // must ship collapsed and say so in its title.
+    assert_eq!(
+        row.get("collapsed"),
+        Some(&Value::Bool(true)),
+        "the opt-in system row should ship collapsed"
+    );
+
+    let mut metrics = HashSet::new();
+    if let Some(children) = row.get("panels").and_then(Value::as_array) {
+        extract_metrics_from_panels(children, &mut metrics);
+    }
+
+    // Every metric the system collector publishes should be charted, otherwise enabling
+    // the collector produces series nobody can see.
+    for expected in [
+        "mariadb_system_cpu_seconds_total",
+        "mariadb_system_cpu_cores",
+        "mariadb_system_cpu_cores_physical",
+        "mariadb_system_load1",
+        "mariadb_system_load5",
+        "mariadb_system_load15",
+        "mariadb_system_memory_total_bytes",
+        "mariadb_system_memory_used_bytes",
+        "mariadb_system_memory_free_bytes",
+        "mariadb_system_memory_available_bytes",
+        "mariadb_system_swap_total_bytes",
+        "mariadb_system_swap_used_bytes",
+        "mariadb_system_swap_free_bytes",
+        "mariadb_system_process_group_cpu_seconds_total",
+        "mariadb_system_process_group_memory_bytes",
+        "mariadb_system_process_group_count",
+    ] {
+        assert!(
+            metrics.contains(expected),
+            "the system row should chart {expected}"
+        );
+    }
+}
+
+#[test]
+fn dashboard_is_tagged_with_the_crate_version() {
+    let dashboard = load_dashboard();
+    let version = env!("CARGO_PKG_VERSION");
+
+    let tags: Vec<&str> = dashboard
+        .get("tags")
+        .and_then(Value::as_array)
+        .map(|tags| tags.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+
+    assert!(
+        tags.contains(&version),
+        "grafana/dashboard.json should be tagged with the current crate version {version}; \
+         `just bump` keeps this in sync. Found tags: {tags:?}"
+    );
+}
+
+#[test]
+fn exporter_self_monitoring_row_is_always_last() {
+    let dashboard = load_dashboard();
+
+    let rows: Vec<(&str, i64)> = dashboard
+        .get("panels")
+        .and_then(Value::as_array)
+        .map(|panels| {
+            panels
+                .iter()
+                .filter(|panel| panel["type"] == "row")
+                .filter_map(|panel| {
+                    let title = panel.get("title").and_then(Value::as_str)?;
+                    let y = panel.get("gridPos")?.get("y")?.as_i64()?;
+                    Some((title, y))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    assert!(!rows.is_empty(), "dashboard should contain rows");
+
+    let Some((last_title, last_y)) = rows.last().copied() else {
+        panic!("dashboard should contain rows");
+    };
+
+    // Exporter self-monitoring is about the exporter, not the database, so it stays at the
+    // bottom: new collector rows go above it.
+    assert_eq!(
+        last_title, "Exporter Self-Monitoring",
+        "'Exporter Self-Monitoring' must be the last row; new rows go above it"
+    );
+
+    let highest_y = rows.iter().map(|(_, y)| *y).max().unwrap_or(last_y);
+    assert_eq!(
+        last_y, highest_y,
+        "'Exporter Self-Monitoring' must also sit lowest on the grid (y={last_y}, \
+         but another row is at y={highest_y})"
+    );
+}

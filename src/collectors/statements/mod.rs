@@ -1,21 +1,25 @@
-use crate::collectors::{util::PICO_TO_SECONDS, Collector};
+use crate::collectors::{
+    Collected, Collector, NO_LABELS,
+    util::{DeniedOnce, PICO_TO_SECONDS, QueryFailure, classify_query_error},
+};
 use anyhow::Result;
 use futures::future::BoxFuture;
-use prometheus::{Gauge, GaugeVec, IntGauge, Opts, Registry};
+use prometheus::{GaugeVec, IntGaugeVec, Opts, Registry};
 use sqlx::MySqlPool;
-use tracing::{info_span, instrument};
+use tracing::{debug, info_span, instrument};
 use tracing_futures::Instrument as _;
 
 /// Statements summary from `performance_schema` (opt-in, lightweight aggregate).
 #[derive(Clone)]
 pub struct StatementsCollector {
-    digest_total: IntGauge,
-    digest_errors: IntGauge,
-    digest_warnings: IntGauge,
-    digest_rows_examined: IntGauge,
-    digest_rows_sent: IntGauge,
-    digest_latency_seconds: Gauge,
+    digest_total: IntGaugeVec,
+    digest_errors: IntGaugeVec,
+    digest_warnings: IntGaugeVec,
+    digest_rows_examined: IntGaugeVec,
+    digest_rows_sent: IntGaugeVec,
+    digest_latency_seconds: GaugeVec,
     top_digest_latencies: GaugeVec,
+    denied: DeniedOnce,
 }
 
 impl StatementsCollector {
@@ -27,8 +31,10 @@ impl StatementsCollector {
     ///
     /// Panics if metric names are invalid (should not occur with static names).
     pub fn new() -> Self {
+        // Zero-label vectors so an unavailable performance_schema removes every statement
+        // series instead of freezing the last observed totals.
         let g = |name: &str, help: &str| {
-            IntGauge::new(name, help).expect("valid statement metric")
+            IntGaugeVec::new(Opts::new(name, help), &NO_LABELS).expect("valid statement metric")
         };
 
         let top_digest_latencies = GaugeVec::new(
@@ -61,12 +67,16 @@ impl StatementsCollector {
                 "mariadb_perf_schema_digest_rows_sent_total",
                 "Total rows sent across statement digests",
             ),
-            digest_latency_seconds: Gauge::new(
-                "mariadb_perf_schema_digest_latency_seconds_total",
-                "Total latency across statement digests in picoseconds converted to seconds",
+            digest_latency_seconds: GaugeVec::new(
+                Opts::new(
+                    "mariadb_perf_schema_digest_latency_seconds_total",
+                    "Total latency across statement digests in picoseconds converted to seconds",
+                ),
+                &NO_LABELS,
             )
             .expect("valid mariadb_perf_schema_digest_latency_seconds_total metric"),
             top_digest_latencies,
+            denied: DeniedOnce::default(),
         }
     }
 }
@@ -100,12 +110,10 @@ impl Collector for StatementsCollector {
     }
 
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "statements", otel.kind = "internal"))]
-    fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
-            // Reset top digests to avoid stale data
-            self.top_digest_latencies.reset();
-
-            // Confirm table exists (Performance Schema might be off)
+            // Confirm table exists (Performance Schema might be off). A failing probe is a
+            // fault, not an absent table — it must not be laundered into a skip.
             let exists_span = info_span!(
                 "db.query",
                 db.system = "mysql",
@@ -119,13 +127,12 @@ impl Collector for StatementsCollector {
             )
             .fetch_one(pool)
             .instrument(exists_span)
-            .await
-            .unwrap_or(0)
+            .await?
                 > 0;
 
             if !has_table {
-                tracing::debug!("events_statements_summary_by_digest not available; skipping collection");
-                return Ok(());
+                debug!("events_statements_summary_by_digest not available; skipping collection");
+                return Ok(Collected::Skipped);
             }
 
             // Aggregate totals
@@ -137,7 +144,7 @@ impl Collector for StatementsCollector {
                 otel.kind = "client"
             );
 
-            let totals = sqlx::query_as::<_, (u64, u64, u64, u64, u64, u64)>(
+            let totals = match sqlx::query_as::<_, (u64, u64, u64, u64, u64, u64)>(
                 "SELECT
                     CAST(COALESCE(SUM(COUNT_STAR),0) AS UNSIGNED) as total,
                     CAST(COALESCE(SUM(SUM_ERRORS),0) AS UNSIGNED) as errors,
@@ -149,20 +156,22 @@ impl Collector for StatementsCollector {
             )
             .fetch_one(pool)
             .instrument(totals_span)
-            .await?;
-
-            #[allow(clippy::cast_precision_loss)]
-            let latency_seconds = (totals.5 as f64) / PICO_TO_SECONDS;
-
-            #[allow(clippy::cast_possible_wrap)]
+            .await
             {
-                self.digest_total.set(totals.0 as i64);
-                self.digest_errors.set(totals.1 as i64);
-                self.digest_warnings.set(totals.2 as i64);
-                self.digest_rows_examined.set(totals.3 as i64);
-                self.digest_rows_sent.set(totals.4 as i64);
-                self.digest_latency_seconds.set(latency_seconds);
-            }
+                Ok(t) => t,
+                Err(e) => match classify_query_error(&e) {
+                    QueryFailure::Absent => {
+                        debug!(error = %e, "statement digest table unavailable; skipping");
+                        return Ok(Collected::Skipped);
+                    }
+                    QueryFailure::Denied => {
+                        self.denied
+                            .report("performance_schema.events_statements_summary_by_digest", &e);
+                        return Ok(Collected::Skipped);
+                    }
+                    QueryFailure::Fault => return Err(e.into()),
+                },
+            };
 
             // Top digests by latency (limit 5 to keep cardinality sane)
             let top_span = info_span!(
@@ -184,11 +193,50 @@ impl Collector for StatementsCollector {
             .await
             {
                 Ok(r) => r,
-                Err(e) => {
-                    tracing::error!("Statements digest query failed: {}", e);
-                    vec![]
-                }
+                Err(e) => match classify_query_error(&e) {
+                    QueryFailure::Absent => {
+                        debug!(error = %e, "statement digest table unavailable; skipping");
+                        return Ok(Collected::Skipped);
+                    }
+                    QueryFailure::Denied => {
+                        self.denied
+                            .report("performance_schema.events_statements_summary_by_digest", &e);
+                        return Ok(Collected::Skipped);
+                    }
+                    QueryFailure::Fault => return Err(e.into()),
+                },
             };
+
+            // Every fallible read has succeeded: publish the whole snapshot atomically so a
+            // partial statement surface is never exposed.
+            #[allow(clippy::cast_precision_loss)]
+            let latency_seconds = (totals.5 as f64) / PICO_TO_SECONDS;
+
+            #[allow(clippy::cast_possible_wrap)]
+            {
+                self.digest_total
+                    .with_label_values(&NO_LABELS)
+                    .set(totals.0 as i64);
+                self.digest_errors
+                    .with_label_values(&NO_LABELS)
+                    .set(totals.1 as i64);
+                self.digest_warnings
+                    .with_label_values(&NO_LABELS)
+                    .set(totals.2 as i64);
+                self.digest_rows_examined
+                    .with_label_values(&NO_LABELS)
+                    .set(totals.3 as i64);
+                self.digest_rows_sent
+                    .with_label_values(&NO_LABELS)
+                    .set(totals.4 as i64);
+                self.digest_latency_seconds
+                    .with_label_values(&NO_LABELS)
+                    .set(latency_seconds);
+            }
+
+            // Reset after the reads succeeded and immediately before publishing, so digests
+            // that dropped out of the top-5 disappear without an error ever clearing them.
+            self.top_digest_latencies.reset();
 
             for (digest, schema, latency_ps) in rows {
                 let digest_label = digest.unwrap_or_else(|| "unknown".to_string());
@@ -200,8 +248,19 @@ impl Collector for StatementsCollector {
                     .set(latency_seconds);
             }
 
-            Ok(())
+            Ok(Collected::Fresh)
         })
+    }
+
+    /// An unavailable statement digest source clears all seven statement families together.
+    fn reset_metrics(&self) {
+        self.digest_total.reset();
+        self.digest_errors.reset();
+        self.digest_warnings.reset();
+        self.digest_rows_examined.reset();
+        self.digest_rows_sent.reset();
+        self.digest_latency_seconds.reset();
+        self.top_digest_latencies.reset();
     }
 
     fn enabled_by_default(&self) -> bool {

@@ -1,0 +1,188 @@
+# Golden metric-metadata surface: name	type	help
+# Sorted by name. See tests/metric_metadata.rs for the contract.
+mariadb_audit_log_enabled	gauge	Whether the audit_log plugin is active (1=enabled, 0=disabled)
+mariadb_binlog_bytes_written	gauge	Bytes written to the binary log
+mariadb_binlog_cache_disk_use	gauge	Number of transactions that used binlog cache disk
+mariadb_binlog_stmt_cache_disk_use	gauge	Number of statements that used binlog stmt cache disk
+mariadb_exporter_build_info	gauge	Build information for mariadb_exporter
+mariadb_exporter_collector_last_scrape_success	gauge	Whether the last scrape was successful (1=success, 0=failure)
+mariadb_exporter_collector_last_scrape_timestamp_seconds	gauge	Unix timestamp of the last scrape attempt per collector
+mariadb_exporter_collector_scrape_duration_seconds	histogram	Time spent scraping each collector in seconds
+mariadb_exporter_metrics_total	gauge	Total number of metrics currently exported (for cardinality monitoring)
+mariadb_exporter_process_cpu_cores	gauge	Number of CPU cores available on the system
+mariadb_exporter_process_cpu_percent	gauge	Current CPU usage percentage (matches ps %cpu, can exceed 100%)
+mariadb_exporter_process_open_fds	gauge	Number of open file descriptors
+mariadb_exporter_process_resident_memory_bytes	gauge	Resident memory size in bytes (RSS)
+mariadb_exporter_process_start_time_seconds	gauge	Start time of the process since unix epoch in seconds
+mariadb_exporter_process_virtual_memory_bytes	gauge	Virtual memory size in bytes (VSZ)
+mariadb_exporter_scrapes_total	gauge	Total number of scrapes performed since start
+mariadb_exporter_system_memory_total_bytes	gauge	Total system memory in bytes
+mariadb_global_status_aborted_clients	gauge	Connections aborted because the client died without closing
+mariadb_global_status_aborted_connects	gauge	Connections rejected due to errors
+mariadb_global_status_bytes_received	gauge	Bytes received from all clients
+mariadb_global_status_bytes_sent	gauge	Bytes sent to all clients
+mariadb_global_status_com_delete	gauge	Number of DELETE statements executed
+mariadb_global_status_com_insert	gauge	Number of INSERT statements executed
+mariadb_global_status_com_replace	gauge	Number of REPLACE statements executed
+mariadb_global_status_com_select	gauge	Number of SELECT statements executed
+mariadb_global_status_com_update	gauge	Number of UPDATE statements executed
+mariadb_global_status_connection_errors_max_connections	gauge	Failed connections because max_connections was reached
+mariadb_global_status_connection_errors_refused	gauge	Failed connections because server refused them
+mariadb_global_status_connection_errors_too_many_connections	gauge	Failed connections because too many connections
+mariadb_global_status_connections	gauge	Number of connection attempts (successful or not)
+mariadb_global_status_created_tmp_disk_tables	gauge	Number of on-disk temporary tables created automatically
+mariadb_global_status_created_tmp_files	gauge	Number of temporary files created
+mariadb_global_status_created_tmp_tables	gauge	Number of internal temporary tables created
+mariadb_global_status_handler_delete	gauge	Requests to delete a row from a table
+mariadb_global_status_handler_read_first	gauge	Times first entry in index was read
+mariadb_global_status_handler_read_key	gauge	Requests to read a row based on a key
+mariadb_global_status_handler_read_next	gauge	Requests to read next row in key order
+mariadb_global_status_handler_read_prev	gauge	Requests to read previous row in key order
+mariadb_global_status_handler_read_rnd	gauge	Requests to read a row based on a fixed position
+mariadb_global_status_handler_read_rnd_next	gauge	Requests to read next row in data file
+mariadb_global_status_handler_update	gauge	Requests to update a row in a table
+mariadb_global_status_handler_write	gauge	Requests to insert a row into a table
+mariadb_global_status_key_blocks_not_flushed	gauge	Number of key blocks that have changed but not flushed to disk
+mariadb_global_status_key_blocks_unused	gauge	Number of unused blocks in the key cache
+mariadb_global_status_key_blocks_used	gauge	Number of used blocks in the key cache
+mariadb_global_status_key_read_requests	gauge	Number of requests to read a key block from cache
+mariadb_global_status_key_reads	gauge	Number of physical reads of a key block from disk
+mariadb_global_status_key_write_requests	gauge	Number of requests to write a key block to cache
+mariadb_global_status_key_writes	gauge	Number of physical writes of a key block to disk
+mariadb_global_status_max_used_connections	gauge	Highest number of concurrent connections since server start
+mariadb_global_status_open_files	gauge	Number of files open by the server
+mariadb_global_status_open_tables	gauge	Number of tables currently open
+mariadb_global_status_opened_files	gauge	Number of files that have been opened
+mariadb_global_status_opened_tables	gauge	Number of tables that have been opened
+mariadb_global_status_queries_total	counter	Statements executed by the server (includes replication)
+mariadb_global_status_questions_total	counter	Statements executed by clients (includes stored program calls)
+mariadb_global_status_select_full_join	gauge	Joins without indexes (should be 0)
+mariadb_global_status_select_full_range_join	gauge	Joins using range search on reference table
+mariadb_global_status_select_range	gauge	Joins using ranges on the first table
+mariadb_global_status_select_range_check	gauge	Joins without keys that check for key usage after each row
+mariadb_global_status_select_scan	gauge	Joins done by scanning the first table
+mariadb_global_status_slow_queries	gauge	Number of queries longer than long_query_time
+mariadb_global_status_sort_merge_passes	gauge	Number of merge passes for sort operations
+mariadb_global_status_sort_range	gauge	Number of sorts done using ranges
+mariadb_global_status_sort_rows	gauge	Number of rows sorted
+mariadb_global_status_sort_scan	gauge	Number of sorts done by scanning the table
+mariadb_global_status_table_locks_immediate	gauge	Table locks granted immediately
+mariadb_global_status_table_locks_waited	gauge	Table locks that had to wait
+mariadb_global_status_table_open_cache_hits	gauge	Number of table cache hits
+mariadb_global_status_table_open_cache_misses	gauge	Number of table cache misses
+mariadb_global_status_table_open_cache_overflows	gauge	Number of table cache overflows
+mariadb_global_status_threads_cached	gauge	Number of threads in the thread cache
+mariadb_global_status_threads_connected	gauge	Number of currently open connections
+mariadb_global_status_threads_created	gauge	Number of threads created to handle connections
+mariadb_global_status_threads_running	gauge	Number of threads that are not sleeping
+mariadb_global_status_uptime_seconds	gauge	Server uptime in seconds
+mariadb_global_variables_have_openssl	gauge	Server built with OpenSSL (1/0)
+mariadb_global_variables_have_ssl	gauge	Server has SSL available (1/0)
+mariadb_global_variables_max_connections	gauge	Maximum number of simultaneous client connections allowed
+mariadb_global_variables_performance_schema	gauge	Performance schema enabled (1/0)
+mariadb_info_schema_query_response_time_seconds_count	counter	Total count of queries tracked
+mariadb_info_schema_query_response_time_seconds_sum	counter	Total sum of query response times in seconds
+mariadb_info_schema_table_rows	gauge	Approximate row count per table
+mariadb_info_schema_table_size_bytes	gauge	Approximate table size (data+index) in bytes
+mariadb_info_schema_userstats_bytes_received_total	gauge	Bytes received per user
+mariadb_info_schema_userstats_bytes_sent_total	gauge	Bytes sent per user
+mariadb_info_schema_userstats_connections_total	gauge	Total connections per user (user_statistics)
+mariadb_info_schema_userstats_rows_deleted_total	gauge	Rows deleted per user
+mariadb_info_schema_userstats_rows_inserted_total	gauge	Rows inserted per user
+mariadb_info_schema_userstats_rows_read_total	gauge	Rows read per user
+mariadb_info_schema_userstats_rows_sent_total	gauge	Rows sent per user
+mariadb_info_schema_userstats_rows_updated_total	gauge	Rows updated per user
+mariadb_innodb_active_transactions	gauge	Number of active InnoDB transactions
+mariadb_innodb_adaptive_hash_searches_btree_total	gauge	Adaptive hash index searches requiring B-tree lookup
+mariadb_innodb_adaptive_hash_searches_total	gauge	Adaptive hash index searches
+mariadb_innodb_buffer_pool_bytes_dirty	gauge	Bytes of dirty data in InnoDB buffer pool
+mariadb_innodb_buffer_pool_pages_data	gauge	InnoDB buffer pool pages containing data
+mariadb_innodb_buffer_pool_pages_dirty	gauge	InnoDB buffer pool pages currently dirty
+mariadb_innodb_buffer_pool_pages_free	gauge	Free InnoDB buffer pool pages
+mariadb_innodb_buffer_pool_pages_misc	gauge	InnoDB buffer pool pages for misc use
+mariadb_innodb_buffer_pool_pages_total	gauge	Total number of InnoDB buffer pool pages
+mariadb_innodb_buffer_pool_read_ahead	gauge	Number of pages read ahead
+mariadb_innodb_buffer_pool_read_ahead_evicted	gauge	Number of read ahead pages evicted without being accessed
+mariadb_innodb_buffer_pool_read_requests	gauge	Logical read requests served by the buffer pool
+mariadb_innodb_buffer_pool_reads	gauge	Physical reads from disk into the buffer pool
+mariadb_innodb_buffer_pool_size_bytes	gauge	Configured size of the InnoDB buffer pool in bytes
+mariadb_innodb_buffer_pool_wait_free	gauge	Number of times waited for free buffer pool page
+mariadb_innodb_buffer_pool_write_requests	gauge	Write requests for the buffer pool
+mariadb_innodb_checkpoint_age_bytes	gauge	InnoDB checkpoint age in bytes (LSN current - LSN checkpoint)
+mariadb_innodb_data_fsyncs	gauge	Number of fsync() operations
+mariadb_innodb_data_pending_fsyncs	gauge	Pending InnoDB fsync() calls
+mariadb_innodb_data_pending_reads	gauge	Pending InnoDB data file reads
+mariadb_innodb_data_pending_writes	gauge	Pending InnoDB data file writes
+mariadb_innodb_data_read_bytes	gauge	Amount of data read in bytes
+mariadb_innodb_data_reads	gauge	Number of data reads
+mariadb_innodb_data_writes	gauge	Number of data writes
+mariadb_innodb_data_written_bytes	gauge	Amount of data written in bytes
+mariadb_innodb_deadlocks_total	gauge	Total number of InnoDB deadlocks
+mariadb_innodb_history_list_length	gauge	Undo log history list length
+mariadb_innodb_lock_timeouts_total	gauge	Total number of InnoDB lock timeouts
+mariadb_innodb_log_waits	gauge	Log writes that had to wait for a log flush
+mariadb_innodb_log_write_ratio	gauge	InnoDB log write ratio (log writes / write requests)
+mariadb_innodb_log_write_requests	gauge	InnoDB redo log write requests
+mariadb_innodb_log_written	gauge	Bytes written to InnoDB redo log
+mariadb_innodb_lsn_checkpoint	gauge	Last checkpoint LSN
+mariadb_innodb_lsn_current	gauge	Current InnoDB log sequence number (LSN)
+mariadb_innodb_lsn_flushed	gauge	LSN flushed to disk
+mariadb_innodb_os_log_fsyncs	gauge	Number of fsync() writes to InnoDB log files
+mariadb_innodb_os_log_pending_fsyncs	gauge	Number of pending InnoDB log fsyncs
+mariadb_innodb_os_log_pending_writes	gauge	Number of pending InnoDB log writes
+mariadb_innodb_os_log_written_bytes	gauge	Bytes written to InnoDB log files
+mariadb_innodb_row_lock_current_waits	gauge	Number of row locks currently being waited for
+mariadb_innodb_row_lock_time_seconds	gauge	Time spent in acquiring row locks (seconds)
+mariadb_innodb_row_lock_waits	gauge	Number of times a row lock had to wait
+mariadb_innodb_rows_deleted	gauge	Number of rows deleted from InnoDB tables
+mariadb_innodb_rows_inserted	gauge	Number of rows inserted into InnoDB tables
+mariadb_innodb_rows_read	gauge	Number of rows read from InnoDB tables
+mariadb_innodb_rows_updated	gauge	Number of rows updated in InnoDB tables
+mariadb_innodb_semaphore_wait_time_ms_total	gauge	Total semaphore wait time in milliseconds
+mariadb_innodb_semaphore_waits_total	gauge	Total number of semaphore waits
+mariadb_perf_schema_digest_errors_total	gauge	Total errors across statement digests
+mariadb_perf_schema_digest_latency_seconds	gauge	Top statement digests by total latency (seconds)
+mariadb_perf_schema_digest_latency_seconds_total	gauge	Total latency across statement digests in picoseconds converted to seconds
+mariadb_perf_schema_digest_rows_examined_total	gauge	Total rows examined across statement digests
+mariadb_perf_schema_digest_rows_sent_total	gauge	Total rows sent across statement digests
+mariadb_perf_schema_digest_total	gauge	Total statements counted in performance_schema digests
+mariadb_perf_schema_digest_warnings_total	gauge	Total warnings across statement digests
+mariadb_perf_schema_metadata_lock_count	gauge	Number of metadata locks currently listed
+mariadb_perf_schema_table_lock_waits	gauge	Number of table lock waits observed (performance_schema)
+mariadb_primary_binlog_files	gauge	Number of binlog files on primary (requires binary logging)
+mariadb_replica_configured	gauge	Replica configured (1 = yes, 0 = no)
+mariadb_replica_io_running	gauge	Whether the I/O thread is running (1 = Yes, 0 = No)
+mariadb_replica_last_io_errno	gauge	Last I/O error code
+mariadb_replica_last_sql_errno	gauge	Last SQL error code
+mariadb_replica_master_server_id	gauge	Master server ID
+mariadb_replica_relay_log_pos	gauge	Current relay log position
+mariadb_replica_relay_log_space_bytes	gauge	Total combined size of relay logs on replica
+mariadb_replica_seconds_behind_master_seconds	gauge	Seconds behind master (replication lag, -1 = NULL/stopped)
+mariadb_replica_sql_running	gauge	Whether the SQL thread is running (1 = Yes, 0 = No)
+mariadb_slave_status_io_running	gauge	Replica IO thread running (1/0)
+mariadb_slave_status_seconds_behind_master	gauge	Seconds the replica is behind the primary
+mariadb_slave_status_sql_running	gauge	Replica SQL thread running (1/0)
+mariadb_ssl_cert_not_after_seconds	gauge	Unix timestamp of the SSL certificate's not-after (expiration) date
+mariadb_ssl_cert_not_before_seconds	gauge	Unix timestamp of the SSL certificate's not-before date
+mariadb_ssl_server_configured	gauge	Whether the MariaDB server has SSL/TLS configured (1) or not (0)
+mariadb_ssl_version_info	gauge	TLS version and cipher configured on the server
+mariadb_system_cpu_cores	gauge	Number of logical CPU cores on the host
+mariadb_system_cpu_cores_physical	gauge	Number of physical CPU cores on the host
+mariadb_system_cpu_seconds_total	counter	Cumulative host CPU time in seconds per logical core, by mode
+mariadb_system_load1	gauge	Host load average over the last 1 minute
+mariadb_system_load15	gauge	Host load average over the last 15 minutes
+mariadb_system_load5	gauge	Host load average over the last 5 minutes
+mariadb_system_memory_available_bytes	gauge	Memory available for new allocations without swapping in bytes (equals free memory on FreeBSD/Windows)
+mariadb_system_memory_free_bytes	gauge	Unused physical memory on the host in bytes
+mariadb_system_memory_total_bytes	gauge	Total physical memory on the host in bytes
+mariadb_system_memory_used_bytes	gauge	Used physical memory on the host in bytes
+mariadb_system_process_group_count	gauge	Number of host processes matched in the group
+mariadb_system_process_group_cpu_seconds_total	counter	Cumulative CPU time in seconds (user + system) consumed by host processes in the group, since the exporter started tracking; use rate() for cores consumed
+mariadb_system_process_group_memory_bytes	gauge	Resident memory of the host process group in bytes (Linux: PSS, so pages shared with other processes are not double-counted; FreeBSD: summed RSS)
+mariadb_system_swap_free_bytes	gauge	Free swap space on the host in bytes
+mariadb_system_swap_total_bytes	gauge	Total swap space on the host in bytes
+mariadb_system_swap_used_bytes	gauge	Used swap space on the host in bytes
+mariadb_up	gauge	Whether MariaDB is up (1) or down (0)
+mariadb_userstat_enabled	gauge	Whether user statistics are enabled (1=enabled, 0=disabled)
+mariadb_version_info	gauge	MariaDB version information with labels for version details.
+mariadb_version_num	gauge	MariaDB version number formatted as major*10000 + minor*100 + patch

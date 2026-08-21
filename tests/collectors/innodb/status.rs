@@ -11,7 +11,18 @@ async fn test_innodb_collector_registers_without_error() -> Result<()> {
 
     collector.register_metrics(&registry)?;
 
-    // Verify all metrics are registered
+    // Every InnoDB status metric is a zero-label vector so an unreadable engine status can
+    // remove it, which means nothing is gathered until a value is published. Publish a
+    // parsed snapshot first, then assert the families are present.
+    collector.status().parse(
+        "Log sequence number 10
+Log flushed up to 9
+Last checkpoint at 8
+---TRANSACTION 1, ACTIVE 1 sec
+Mutex spin waits 1, rounds 2, OS waits 3
+100 hash searches/s, 10 non-hash searches/s",
+    )?;
+
     let metric_families = registry.gather();
 
     let expected_metrics = vec![

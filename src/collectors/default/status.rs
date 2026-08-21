@@ -1,159 +1,140 @@
-use crate::collectors::Collector;
-use anyhow::{Result, anyhow};
+use crate::collectors::{Collected, Collector, NO_LABELS};
+use anyhow::Result;
 use futures::future::BoxFuture;
-use prometheus::{IntCounter, IntGauge, Registry};
-use sqlx::mysql::MySqlRow;
+use prometheus::{IntCounterVec, IntGaugeVec, Opts, Registry};
 use sqlx::{MySqlPool, Row};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use tracing::{debug, info_span, instrument};
 use tracing_futures::Instrument as _;
-
-// Keep query semantics aligned with upstream mysqld_exporter:
-// try old/new forms and lock-free suffixes where supported.
-const REPLICA_STATUS_QUERY_CANDIDATES: &[&str] = &[
-    "SHOW ALL SLAVES STATUS",
-    "SHOW ALL SLAVES STATUS NONBLOCKING",
-    "SHOW ALL SLAVES STATUS NOLOCK",
-    "SHOW SLAVE STATUS",
-    "SHOW SLAVE STATUS NONBLOCKING",
-    "SHOW SLAVE STATUS NOLOCK",
-    "SHOW REPLICA STATUS",
-    "SHOW REPLICA STATUS NONBLOCKING",
-    "SHOW REPLICA STATUS NOLOCK",
-];
 
 /// Collects core `MariaDB` status/health metrics (default-on).
 #[derive(Clone)]
 pub struct StatusCollector {
     // Global status (connections/traffic)
-    global_uptime: IntGauge,
-    threads_connected: IntGauge,
-    threads_running: IntGauge,
-    connections: IntGauge,
-    max_used_connections: IntGauge,
-    aborted_connects: IntGauge,
-    aborted_clients: IntGauge,
-    bytes_received: IntGauge,
-    bytes_sent: IntGauge,
-    questions_total: IntCounter,
-    queries_total: IntCounter,
+    global_uptime: IntGaugeVec,
+    threads_connected: IntGaugeVec,
+    threads_running: IntGaugeVec,
+    connections: IntGaugeVec,
+    max_used_connections: IntGaugeVec,
+    aborted_connects: IntGaugeVec,
+    aborted_clients: IntGaugeVec,
+    bytes_received: IntGaugeVec,
+    bytes_sent: IntGaugeVec,
+    questions_total: IntCounterVec,
+    queries_total: IntCounterVec,
     questions_last: Arc<AtomicI64>,
     queries_last: Arc<AtomicI64>,
-    slow_queries: IntGauge,
-    open_files: IntGauge,
-    open_tables: IntGauge,
-    table_locks_immediate: IntGauge,
-    table_locks_waited: IntGauge,
-    created_tmp_disk_tables: IntGauge,
-    created_tmp_tables: IntGauge,
-    created_tmp_files: IntGauge,
-    connection_errors_max_connections: IntGauge,
-    connection_errors_too_many_connections: IntGauge,
-    connection_errors_refused: IntGauge,
+    slow_queries: IntGaugeVec,
+    open_files: IntGaugeVec,
+    open_tables: IntGaugeVec,
+    table_locks_immediate: IntGaugeVec,
+    table_locks_waited: IntGaugeVec,
+    created_tmp_disk_tables: IntGaugeVec,
+    created_tmp_tables: IntGaugeVec,
+    created_tmp_files: IntGaugeVec,
+    connection_errors_max_connections: IntGaugeVec,
+    connection_errors_too_many_connections: IntGaugeVec,
+    connection_errors_refused: IntGaugeVec,
     // Query execution and sorts
-    sort_merge_passes: IntGauge,
-    sort_range: IntGauge,
-    sort_rows: IntGauge,
-    sort_scan: IntGauge,
-    select_full_join: IntGauge,
-    select_full_range_join: IntGauge,
-    select_range: IntGauge,
-    select_range_check: IntGauge,
-    select_scan: IntGauge,
+    sort_merge_passes: IntGaugeVec,
+    sort_range: IntGaugeVec,
+    sort_rows: IntGaugeVec,
+    sort_scan: IntGaugeVec,
+    select_full_join: IntGaugeVec,
+    select_full_range_join: IntGaugeVec,
+    select_range: IntGaugeVec,
+    select_range_check: IntGaugeVec,
+    select_scan: IntGaugeVec,
     // Handler statistics (index usage)
-    handler_read_first: IntGauge,
-    handler_read_key: IntGauge,
-    handler_read_next: IntGauge,
-    handler_read_prev: IntGauge,
-    handler_read_rnd: IntGauge,
-    handler_read_rnd_next: IntGauge,
-    handler_write: IntGauge,
-    handler_update: IntGauge,
-    handler_delete: IntGauge,
+    handler_read_first: IntGaugeVec,
+    handler_read_key: IntGaugeVec,
+    handler_read_next: IntGaugeVec,
+    handler_read_prev: IntGaugeVec,
+    handler_read_rnd: IntGaugeVec,
+    handler_read_rnd_next: IntGaugeVec,
+    handler_write: IntGaugeVec,
+    handler_update: IntGaugeVec,
+    handler_delete: IntGaugeVec,
     // Command statistics (SQL-level)
-    com_select: IntGauge,
-    com_insert: IntGauge,
-    com_update: IntGauge,
-    com_delete: IntGauge,
-    com_replace: IntGauge,
+    com_select: IntGaugeVec,
+    com_insert: IntGaugeVec,
+    com_update: IntGaugeVec,
+    com_delete: IntGaugeVec,
+    com_replace: IntGaugeVec,
     // Table cache
-    opened_tables: IntGauge,
-    opened_files: IntGauge,
-    table_open_cache_hits: IntGauge,
-    table_open_cache_misses: IntGauge,
-    table_open_cache_overflows: IntGauge,
+    opened_tables: IntGaugeVec,
+    opened_files: IntGaugeVec,
+    table_open_cache_hits: IntGaugeVec,
+    table_open_cache_misses: IntGaugeVec,
+    table_open_cache_overflows: IntGaugeVec,
     // Thread cache
-    threads_created: IntGauge,
-    threads_cached: IntGauge,
+    threads_created: IntGaugeVec,
+    threads_cached: IntGaugeVec,
     // Key buffer (MyISAM)
-    key_read_requests: IntGauge,
-    key_reads: IntGauge,
-    key_write_requests: IntGauge,
-    key_writes: IntGauge,
-    key_blocks_unused: IntGauge,
-    key_blocks_used: IntGauge,
-    key_blocks_not_flushed: IntGauge,
+    key_read_requests: IntGaugeVec,
+    key_reads: IntGaugeVec,
+    key_write_requests: IntGaugeVec,
+    key_writes: IntGaugeVec,
+    key_blocks_unused: IntGaugeVec,
+    key_blocks_used: IntGaugeVec,
+    key_blocks_not_flushed: IntGaugeVec,
     // InnoDB
-    innodb_buffer_pool_pages_data: IntGauge,
-    innodb_buffer_pool_pages_dirty: IntGauge,
-    innodb_buffer_pool_pages_free: IntGauge,
-    innodb_buffer_pool_size_bytes: IntGauge,
-    innodb_buffer_pool_bytes_dirty: IntGauge,
-    innodb_buffer_pool_read_requests: IntGauge,
-    innodb_buffer_pool_reads: IntGauge,
-    innodb_buffer_pool_write_requests: IntGauge,
-    innodb_log_waits: IntGauge,
-    innodb_log_written: IntGauge,
-    innodb_log_write_requests: IntGauge,
-    innodb_row_lock_time: IntGauge,
-    innodb_row_lock_waits: IntGauge,
-    innodb_row_lock_current_waits: IntGauge,
-    innodb_history_list_length: IntGauge,
-    innodb_data_pending_reads: IntGauge,
-    innodb_data_pending_writes: IntGauge,
-    innodb_data_pending_fsyncs: IntGauge,
+    innodb_buffer_pool_pages_data: IntGaugeVec,
+    innodb_buffer_pool_pages_dirty: IntGaugeVec,
+    innodb_buffer_pool_pages_free: IntGaugeVec,
+    innodb_buffer_pool_size_bytes: IntGaugeVec,
+    innodb_buffer_pool_bytes_dirty: IntGaugeVec,
+    innodb_buffer_pool_read_requests: IntGaugeVec,
+    innodb_buffer_pool_reads: IntGaugeVec,
+    innodb_buffer_pool_write_requests: IntGaugeVec,
+    innodb_log_waits: IntGaugeVec,
+    innodb_log_written: IntGaugeVec,
+    innodb_log_write_requests: IntGaugeVec,
+    innodb_row_lock_time: IntGaugeVec,
+    innodb_row_lock_waits: IntGaugeVec,
+    innodb_row_lock_current_waits: IntGaugeVec,
+    innodb_history_list_length: IntGaugeVec,
+    innodb_data_pending_reads: IntGaugeVec,
+    innodb_data_pending_writes: IntGaugeVec,
+    innodb_data_pending_fsyncs: IntGaugeVec,
     // InnoDB row operations
-    innodb_rows_read: IntGauge,
-    innodb_rows_inserted: IntGauge,
-    innodb_rows_updated: IntGauge,
-    innodb_rows_deleted: IntGauge,
+    innodb_rows_read: IntGaugeVec,
+    innodb_rows_inserted: IntGaugeVec,
+    innodb_rows_updated: IntGaugeVec,
+    innodb_rows_deleted: IntGaugeVec,
     // InnoDB data I/O
-    innodb_data_reads: IntGauge,
-    innodb_data_writes: IntGauge,
-    innodb_data_read_bytes: IntGauge,
-    innodb_data_written_bytes: IntGauge,
-    innodb_data_fsyncs: IntGauge,
+    innodb_data_reads: IntGaugeVec,
+    innodb_data_writes: IntGaugeVec,
+    innodb_data_read_bytes: IntGaugeVec,
+    innodb_data_written_bytes: IntGaugeVec,
+    innodb_data_fsyncs: IntGaugeVec,
     // InnoDB deadlocks and lock timeouts
-    innodb_deadlocks: IntGauge,
-    innodb_lock_timeouts: IntGauge,
+    innodb_deadlocks: IntGaugeVec,
+    innodb_lock_timeouts: IntGaugeVec,
     // InnoDB buffer pool efficiency
-    innodb_buffer_pool_pages_misc: IntGauge,
-    innodb_buffer_pool_pages_total: IntGauge,
-    innodb_buffer_pool_wait_free: IntGauge,
-    innodb_buffer_pool_read_ahead: IntGauge,
-    innodb_buffer_pool_read_ahead_evicted: IntGauge,
+    innodb_buffer_pool_pages_misc: IntGaugeVec,
+    innodb_buffer_pool_pages_total: IntGaugeVec,
+    innodb_buffer_pool_wait_free: IntGaugeVec,
+    innodb_buffer_pool_read_ahead: IntGaugeVec,
+    innodb_buffer_pool_read_ahead_evicted: IntGaugeVec,
     // InnoDB log
-    innodb_os_log_written_bytes: IntGauge,
-    innodb_os_log_fsyncs: IntGauge,
-    innodb_os_log_pending_writes: IntGauge,
-    innodb_os_log_pending_fsyncs: IntGauge,
-    innodb_log_write_ratio: IntGauge,
+    innodb_os_log_written_bytes: IntGaugeVec,
+    innodb_os_log_fsyncs: IntGaugeVec,
+    innodb_os_log_pending_writes: IntGaugeVec,
+    innodb_os_log_pending_fsyncs: IntGaugeVec,
+    innodb_log_write_ratio: IntGaugeVec,
     // Replication (replica)
-    slave_status_seconds_behind: IntGauge,
-    slave_status_sql_running: IntGauge,
-    slave_status_io_running: IntGauge,
     // Binlog (primary)
-    binlog_bytes_written: IntGauge,
-    binlog_cache_disk_use: IntGauge,
-    binlog_stmt_cache_disk_use: IntGauge,
+    binlog_bytes_written: IntGaugeVec,
+    binlog_cache_disk_use: IntGaugeVec,
+    binlog_stmt_cache_disk_use: IntGaugeVec,
     // Config flags
-    have_ssl: IntGauge,
-    have_openssl: IntGauge,
-    performance_schema: IntGauge,
-    max_connections: IntGauge,
-    config_vars_initialized: Arc<AtomicBool>,
+    have_ssl: IntGaugeVec,
+    have_openssl: IntGaugeVec,
+    performance_schema: IntGaugeVec,
+    max_connections: IntGaugeVec,
 }
 
 impl StatusCollector {
@@ -166,8 +147,15 @@ impl StatusCollector {
     /// Panics if metric registration opts are invalid (should never happen with static names).
     pub fn new() -> Self {
         // Small helpers to create metrics consistently.
-        let g = |name: &str, help: &str| IntGauge::new(name, help).expect("valid metric name");
-        let c = |name: &str, help: &str| IntCounter::new(name, help).expect("valid metric name");
+        // Zero-label vectors throughout: a status or variable key that disappears from an
+        // otherwise successful read must remove its series, and a scalar gauge cannot be
+        // removed once registered.
+        let g = |name: &str, help: &str| {
+            IntGaugeVec::new(Opts::new(name, help), &NO_LABELS).expect("valid metric name")
+        };
+        let c = |name: &str, help: &str| {
+            IntCounterVec::new(Opts::new(name, help), &NO_LABELS).expect("valid metric name")
+        };
 
         Self {
             global_uptime: g("mariadb_global_status_uptime_seconds", "Server uptime in seconds"),
@@ -569,18 +557,6 @@ impl StatusCollector {
                 "mariadb_innodb_log_write_ratio",
                 "InnoDB log write ratio (log writes / write requests)",
             ),
-            slave_status_seconds_behind: g(
-                "mariadb_slave_status_seconds_behind_master",
-                "Seconds the replica is behind the primary",
-            ),
-            slave_status_sql_running: g(
-                "mariadb_slave_status_sql_running",
-                "Replica SQL thread running (1/0)",
-            ),
-            slave_status_io_running: g(
-                "mariadb_slave_status_io_running",
-                "Replica IO thread running (1/0)",
-            ),
             binlog_bytes_written: g(
                 "mariadb_binlog_bytes_written",
                 "Bytes written to the binary log",
@@ -606,13 +582,13 @@ impl StatusCollector {
                 "mariadb_global_variables_max_connections",
                 "Maximum number of simultaneous client connections allowed",
             ),
-            config_vars_initialized: Arc::new(AtomicBool::new(false)),
         }
     }
 
+    /// Every gauge this collector owns, in registration order.
     #[allow(clippy::too_many_lines)]
-    fn register_gauges(&self, registry: &Registry) -> Result<()> {
-        let metrics: &[&IntGauge] = &[
+    fn all_gauges(&self) -> Vec<&IntGaugeVec> {
+        vec![
             &self.global_uptime,
             &self.threads_connected,
             &self.threads_running,
@@ -721,9 +697,6 @@ impl StatusCollector {
             &self.innodb_os_log_pending_writes,
             &self.innodb_os_log_pending_fsyncs,
             &self.innodb_log_write_ratio,
-            &self.slave_status_seconds_behind,
-            &self.slave_status_sql_running,
-            &self.slave_status_io_running,
             &self.binlog_bytes_written,
             &self.binlog_cache_disk_use,
             &self.binlog_stmt_cache_disk_use,
@@ -731,10 +704,12 @@ impl StatusCollector {
             &self.have_openssl,
             &self.performance_schema,
             &self.max_connections,
-        ];
+        ]
+    }
 
-        for m in metrics {
-            registry.register(Box::new((*m).clone()))?;
+    fn register_gauges(&self, registry: &Registry) -> Result<()> {
+        for m in self.all_gauges() {
+            registry.register(Box::new(m.clone()))?;
         }
 
         registry.register(Box::new(self.questions_total.clone()))?;
@@ -743,51 +718,88 @@ impl StatusCollector {
         Ok(())
     }
 
-    fn set_from_status(status: &HashMap<String, String>, key: &str, gauge: &IntGauge) {
-        if let Some(raw) = status.get(&key.to_ascii_uppercase()) {
-            if let Ok(v) = raw.parse::<i64>() {
-                gauge.set(v);
-            } else {
+    fn reset_all_gauges(&self) {
+        for m in self.all_gauges() {
+            m.reset();
+        }
+    }
+
+    /// Publish a status value, scaling the parsed number.
+    ///
+    /// A key that is absent or unparseable in an *otherwise successful* read means the server
+    /// no longer reports it (a storage engine was unloaded, a variable was renamed between
+    /// versions), so the series is removed rather than left showing the previous scrape.
+    fn set_scaled_from_status(
+        status: &HashMap<String, String>,
+        key: &str,
+        gauge: &IntGaugeVec,
+        divisor: i64,
+    ) {
+        match status
+            .get(&key.to_ascii_uppercase())
+            .map(|raw| (raw, raw.parse::<i64>()))
+        {
+            Some((_, Ok(v))) => gauge.with_label_values(&NO_LABELS).set(v / divisor),
+            Some((raw, Err(_))) => {
                 debug!(metric = key, value = raw, "could not parse status value");
+                let _ = gauge.remove_label_values(&NO_LABELS);
+            }
+            None => {
+                let _ = gauge.remove_label_values(&NO_LABELS);
             }
         }
     }
 
-    fn set_from_status_ms_to_seconds(status: &HashMap<String, String>, key: &str, gauge: &IntGauge) {
-        if let Some(raw) = status.get(&key.to_ascii_uppercase()) {
-            if let Ok(v) = raw.parse::<i64>() { gauge.set(v / 1_000) } else { debug!(metric = key, value = raw, "could not parse status value") }
-        }
+    fn set_from_status(status: &HashMap<String, String>, key: &str, gauge: &IntGaugeVec) {
+        Self::set_scaled_from_status(status, key, gauge, 1);
     }
 
+    fn set_from_status_ms_to_seconds(
+        status: &HashMap<String, String>,
+        key: &str,
+        gauge: &IntGaugeVec,
+    ) {
+        Self::set_scaled_from_status(status, key, gauge, 1_000);
+    }
+
+    /// Publish a monotonic counter from a status value.
+    ///
+    /// The counter tracks deltas so a server restart (value going backwards) is republished
+    /// as a reset rather than as a huge negative jump. A key missing from a successful read
+    /// removes the series; Prometheus reads the later reappearance as a counter reset, which
+    /// is exactly what happened.
     fn set_counter_from_status(
         status: &HashMap<String, String>,
         key: &str,
-        counter: &IntCounter,
+        counter: &IntCounterVec,
         last_seen: &AtomicI64,
     ) {
-        if let Some(raw) = status.get(&key.to_ascii_uppercase()) {
+        let Some(raw) = status.get(&key.to_ascii_uppercase()) else {
+            let _ = counter.remove_label_values(&NO_LABELS);
+            last_seen.store(0, Ordering::Relaxed);
+            return;
+        };
+
+        {
             if let Ok(v) = raw.parse::<i64>() {
                 let previous = last_seen.swap(v, Ordering::Relaxed);
                 if v >= 0 {
-                    if previous <= 0 {
-                        counter.reset();
-                        if let Ok(incr) = u64::try_from(v) {
-                            counter.inc_by(incr);
-                        }
-                    } else if v >= previous {
+                    if previous > 0 && v >= previous {
                         let delta = v.saturating_sub(previous);
                         if let Ok(incr) = u64::try_from(delta) {
-                            counter.inc_by(incr);
+                            counter.with_label_values(&NO_LABELS).inc_by(incr);
                         }
                     } else {
                         counter.reset();
                         if let Ok(incr) = u64::try_from(v) {
-                            counter.inc_by(incr);
+                            counter.with_label_values(&NO_LABELS).inc_by(incr);
                         }
                     }
                 }
             } else {
                 debug!(metric = key, value = raw, "could not parse status value");
+                let _ = counter.remove_label_values(&NO_LABELS);
+                last_seen.store(0, Ordering::Relaxed);
             }
         }
     }
@@ -978,169 +990,28 @@ impl StatusCollector {
         Self::set_from_status(status, "Innodb_os_log_pending_writes", &self.innodb_os_log_pending_writes);
         Self::set_from_status(status, "Innodb_os_log_pending_fsyncs", &self.innodb_os_log_pending_fsyncs);
 
-        // Calculate InnoDB log write ratio (avoid division by zero)
-        if let Some(write_requests) = status.get("INNODB_LOG_WRITE_REQUESTS")
-            && let Ok(requests) = write_requests.parse::<i64>()
-            && requests > 0
-            && let Some(log_writes) = status.get("INNODB_LOG_WRITES")
-            && let Ok(writes) = log_writes.parse::<i64>()
-        {
-            let ratio = (writes * 100) / requests;
-            self.innodb_log_write_ratio.set(ratio);
-        }
-    }
+        // Calculate InnoDB log write ratio. With no write requests the ratio is undefined,
+        // not zero, so the series is removed instead of claiming a 0% write ratio.
+        let ratio = status
+            .get("INNODB_LOG_WRITE_REQUESTS")
+            .and_then(|raw| raw.parse::<i64>().ok())
+            .filter(|requests| *requests > 0)
+            .zip(
+                status
+                    .get("INNODB_LOG_WRITES")
+                    .and_then(|raw| raw.parse::<i64>().ok()),
+            )
+            .map(|(requests, writes)| (writes * 100) / requests);
 
-    async fn collect_replication(&self, pool: &MySqlPool) -> Result<()> {
-        let rows = match Self::query_replica_status_rows(pool).await {
-            Ok(rows) => rows,
-            Err(e) => {
-                debug!(error = %e, "replica status not available; marking replication lag unknown");
-                self.slave_status_seconds_behind.set(-1);
-                self.slave_status_sql_running.set(0);
-                self.slave_status_io_running.set(0);
-                return Ok(());
-            }
-        };
-
-        if rows.is_empty() {
-            // Not a replica; do not report false "0 lag in sync".
-            self.slave_status_seconds_behind.set(-1);
-            self.slave_status_sql_running.set(0);
-            self.slave_status_io_running.set(0);
-            return Ok(());
-        }
-
-        let channel_states: Vec<_> = rows
-            .iter()
-            .map(|row| {
-                let lag = Self::parse_i64_from_columns(
-                    row,
-                    &["Seconds_Behind_Master", "Seconds_Behind_Source"],
-                );
-                let io_running = Self::parse_string_from_columns(
-                    row,
-                    &["Slave_IO_Running", "Replica_IO_Running"],
-                );
-                let sql_running = Self::parse_string_from_columns(
-                    row,
-                    &["Slave_SQL_Running", "Replica_SQL_Running"],
-                );
-
-                (
-                    lag,
-                    Self::as_running(io_running.as_deref()),
-                    Self::as_running(sql_running.as_deref()),
-                )
-            })
-            .collect();
-
-        let (lag, io_running, sql_running) = Self::aggregate_replica_channel_states(&channel_states);
-        self.slave_status_seconds_behind.set(lag);
-        self.slave_status_io_running.set(io_running);
-        self.slave_status_sql_running.set(sql_running);
-
-        Ok(())
-    }
-
-    async fn query_replica_status_rows(pool: &MySqlPool) -> Result<Vec<MySqlRow>> {
-        let mut last_error = None;
-        let mut had_empty_success = false;
-
-        for query in REPLICA_STATUS_QUERY_CANDIDATES {
-            let span = info_span!(
-                "db.query",
-                db.system = "mysql",
-                db.operation = "SHOW",
-                db.statement = *query,
-                otel.kind = "client"
-            );
-
-            match sqlx::query(*query).fetch_all(pool).instrument(span).await {
-                Ok(rows) => {
-                    if rows.is_empty() {
-                        had_empty_success = true;
-                        continue;
-                    }
-                    return Ok(rows);
-                }
-                Err(e) => {
-                    debug!(query, error = %e, "replica status query form not supported");
-                    last_error = Some(e);
-                }
+        match ratio {
+            Some(v) => self
+                .innodb_log_write_ratio
+                .with_label_values(&NO_LABELS)
+                .set(v),
+            None => {
+                let _ = self.innodb_log_write_ratio.remove_label_values(&NO_LABELS);
             }
         }
-
-        if had_empty_success {
-            return Ok(Vec::new());
-        }
-
-        Err(anyhow!(
-            "all replica status query forms failed: {}",
-            last_error
-                .map_or_else(|| "unknown error".to_string(), |e| e.to_string())
-        ))
-    }
-
-    fn parse_i64_from_columns(row: &MySqlRow, columns: &[&str]) -> Option<i64> {
-        for column in columns {
-            let unsigned = row.try_get::<Option<u64>, _>(*column).ok().flatten();
-            let signed = row.try_get::<Option<i64>, _>(*column).ok().flatten();
-            let text = row.try_get::<Option<String>, _>(*column).ok().flatten();
-
-            if let Some(value) = Self::parse_i64_from_values(unsigned, signed, text) {
-                return Some(value);
-            }
-        }
-
-        None
-    }
-
-    fn parse_i64_from_values(
-        unsigned: Option<u64>,
-        signed: Option<i64>,
-        text: Option<String>,
-    ) -> Option<i64> {
-        unsigned
-            .and_then(|v| i64::try_from(v).ok())
-            .or(signed)
-            .or_else(|| text.and_then(|value| value.parse::<i64>().ok()))
-    }
-
-    fn parse_string_from_columns(row: &MySqlRow, columns: &[&str]) -> Option<String> {
-        for column in columns {
-            if let Some(value) = row.try_get::<Option<String>, _>(*column).ok().flatten() {
-                return Some(value);
-            }
-        }
-
-        None
-    }
-
-    fn as_running(val: Option<&str>) -> i32 {
-        match val.map(str::to_ascii_lowercase).as_deref() {
-            Some("yes" | "on" | "running") => 1,
-            _ => 0,
-        }
-    }
-
-    fn aggregate_replica_channel_states(channels: &[(Option<i64>, i32, i32)]) -> (i64, i64, i64) {
-        let mut lag: Option<i64> = None;
-        let mut io_running = true;
-        let mut sql_running = true;
-
-        for (channel_lag, channel_io_running, channel_sql_running) in channels {
-            if let Some(value) = channel_lag {
-                lag = Some(lag.map_or(*value, |current| current.max(*value)));
-            }
-            io_running &= *channel_io_running == 1;
-            sql_running &= *channel_sql_running == 1;
-        }
-
-        (
-            lag.unwrap_or(-1),
-            i64::from(io_running),
-            i64::from(sql_running),
-        )
     }
 
     fn collect_binlog(&self, status: &HashMap<String, String>) {
@@ -1153,49 +1024,61 @@ impl StatusCollector {
         );
     }
 
+    /// Publish a boolean-ish server variable, removing the series when the current read no
+    /// longer reports it.
+    fn set_flag_from_variables(
+        vars: &HashMap<String, String>,
+        key: &str,
+        gauge: &IntGaugeVec,
+    ) {
+        match vars.get(key).map(|s| s.to_ascii_lowercase()) {
+            Some(v) => {
+                let flag = i64::from(matches!(v.as_str(), "yes" | "on" | "true" | "1"));
+                gauge.with_label_values(&NO_LABELS).set(flag);
+            }
+            None => {
+                let _ = gauge.remove_label_values(&NO_LABELS);
+            }
+        }
+    }
+
+    /// Publish a numeric server variable, removing the series when it is absent or
+    /// unparseable in the current successful read.
+    fn set_number_from_variables(
+        vars: &HashMap<String, String>,
+        key: &str,
+        gauge: &IntGaugeVec,
+    ) {
+        match vars.get(key).map(|raw| (raw, raw.parse::<i64>())) {
+            Some((_, Ok(v))) => {
+                gauge.with_label_values(&NO_LABELS).set(v);
+                debug!(metric = key, value = v, "updated variable");
+            }
+            Some((raw, Err(_))) => {
+                debug!(metric = key, value = raw, "could not parse variable value");
+                let _ = gauge.remove_label_values(&NO_LABELS);
+            }
+            None => {
+                let _ = gauge.remove_label_values(&NO_LABELS);
+            }
+        }
+    }
+
+    /// Republish every configuration variable from each successful read.
+    ///
+    /// These were previously latched on the first scrape, which meant a variable that
+    /// vanished (or a server replaced behind the same address) kept reporting the very first
+    /// value the exporter ever saw.
     fn collect_variables(&self, vars: &HashMap<String, String>) {
-        // Static config variables (only read once on first scrape)
-        // These cannot be changed at runtime without server restart
-        if !self.config_vars_initialized.load(Ordering::Relaxed) {
-            let to_flag = |val: Option<&String>| match val.map(|s| s.to_ascii_lowercase()) {
-                Some(v) if v == "yes" || v == "on" || v == "true" || v == "1" => 1,
-                _ => 0,
-            };
-
-            self.have_ssl
-                .set(i64::from(to_flag(vars.get(&"have_ssl".to_string()))));
-            self.have_openssl
-                .set(i64::from(to_flag(vars.get(&"have_openssl".to_string()))));
-            self.performance_schema
-                .set(i64::from(to_flag(vars.get(&"performance_schema".to_string()))));
-
-            // Mark static config variables as initialized
-            self.config_vars_initialized.store(true, Ordering::Relaxed);
-            debug!("static config variables initialized (have_ssl, have_openssl, performance_schema)");
-        }
-
-        // Dynamic config variables (read on every scrape)
-        // These can be changed at runtime with SET GLOBAL commands
-
-        // innodb_buffer_pool_size - can be changed dynamically in MariaDB 10.2.2+
-        if let Some(raw) = vars.get(&"innodb_buffer_pool_size".to_string()) {
-            if let Ok(v) = raw.parse::<i64>() {
-                self.innodb_buffer_pool_size_bytes.set(v);
-                debug!(metric = "innodb_buffer_pool_size", value = v, "updated dynamic variable");
-            } else {
-                debug!(metric = "innodb_buffer_pool_size", value = raw, "could not parse variable value");
-            }
-        }
-
-        // max_connections - can be changed dynamically with SET GLOBAL max_connections
-        if let Some(raw) = vars.get(&"max_connections".to_string()) {
-            if let Ok(v) = raw.parse::<i64>() {
-                self.max_connections.set(v);
-                debug!(metric = "max_connections", value = v, "updated dynamic variable");
-            } else {
-                debug!(metric = "max_connections", value = raw, "could not parse variable value");
-            }
-        }
+        Self::set_flag_from_variables(vars, "have_ssl", &self.have_ssl);
+        Self::set_flag_from_variables(vars, "have_openssl", &self.have_openssl);
+        Self::set_flag_from_variables(vars, "performance_schema", &self.performance_schema);
+        Self::set_number_from_variables(
+            vars,
+            "innodb_buffer_pool_size",
+            &self.innodb_buffer_pool_size_bytes,
+        );
+        Self::set_number_from_variables(vars, "max_connections", &self.max_connections);
     }
 }
 
@@ -1215,7 +1098,7 @@ impl Collector for StatusCollector {
     }
 
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "status", otel.kind = "internal"))]
-    fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
             let status_span = info_span!(
                 "db.query",
@@ -1269,9 +1152,21 @@ impl Collector for StatusCollector {
                 .collect();
 
             self.collect_variables(&vars_map);
-            self.collect_replication(pool).await?;
-            Ok(())
+
+            // `information_schema.global_status` and `global_variables` are core server
+            // surfaces: both reads above use `?`, so a failure is an error that preserves
+            // the previous snapshot rather than a skip.
+            Ok(Collected::Fresh)
         })
+    }
+
+    /// Clears every status, `InnoDB`, binlog and configuration series this collector owns.
+    fn reset_metrics(&self) {
+        self.reset_all_gauges();
+        self.questions_total.reset();
+        self.queries_total.reset();
+        self.questions_last.store(0, Ordering::Relaxed);
+        self.queries_last.store(0, Ordering::Relaxed);
     }
 
     fn enabled_by_default(&self) -> bool {
@@ -1287,56 +1182,156 @@ impl Default for StatusCollector {
 #[cfg(test)]
 mod tests {
     use super::StatusCollector;
+    use crate::collectors::{NO_LABELS, published_samples};
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicI64, Ordering};
 
-    #[test]
-    fn running_state_handles_common_replication_values() {
-        assert_eq!(StatusCollector::as_running(Some("Yes")), 1);
-        assert_eq!(StatusCollector::as_running(Some("ON")), 1);
-        assert_eq!(StatusCollector::as_running(Some("Running")), 1);
-        assert_eq!(StatusCollector::as_running(Some("No")), 0);
-        assert_eq!(StatusCollector::as_running(Some("Connecting")), 0);
-        assert_eq!(StatusCollector::as_running(None), 0);
+    fn status(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_ascii_uppercase(), (*v).to_string()))
+            .collect()
     }
 
     #[test]
-    fn parses_unsigned_and_text_replication_numbers() {
-        assert_eq!(
-            StatusCollector::parse_i64_from_values(Some(42), None, None),
-            Some(42)
+    fn status_value_disappears_when_the_key_vanishes() {
+        let collector = StatusCollector::new();
+
+        StatusCollector::set_from_status(
+            &status(&[("Uptime", "42")]),
+            "Uptime",
+            &collector.global_uptime,
         );
-        assert_eq!(
-            StatusCollector::parse_i64_from_values(None, Some(9), None),
-            Some(9)
-        );
-        assert_eq!(
-            StatusCollector::parse_i64_from_values(None, None, Some("13".to_string())),
-            Some(13)
-        );
-        assert_eq!(
-            StatusCollector::parse_i64_from_values(None, None, Some("x".to_string())),
-            None
-        );
+        assert_eq!(collector.global_uptime.with_label_values(&NO_LABELS).get(), 42);
+
+        // A successful read that no longer reports the key must remove the series, not keep
+        // serving 42 as if it were current.
+        StatusCollector::set_from_status(&status(&[]), "Uptime", &collector.global_uptime);
+        assert_eq!(published_samples(&collector.global_uptime), 0);
     }
 
     #[test]
-    fn aggregate_replication_channels_uses_worst_case_semantics() {
-        let channels = vec![(Some(0), 1, 1), (Some(7), 1, 0), (None, 0, 0)];
-        let (lag, io_running, sql_running) =
-            StatusCollector::aggregate_replica_channel_states(&channels);
+    fn unparseable_status_value_removes_the_series() {
+        let collector = StatusCollector::new();
 
-        assert_eq!(lag, 7);
-        assert_eq!(io_running, 0);
-        assert_eq!(sql_running, 0);
+        StatusCollector::set_from_status(
+            &status(&[("Uptime", "42")]),
+            "Uptime",
+            &collector.global_uptime,
+        );
+        StatusCollector::set_from_status(
+            &status(&[("Uptime", "not-a-number")]),
+            "Uptime",
+            &collector.global_uptime,
+        );
+
+        assert_eq!(published_samples(&collector.global_uptime), 0);
     }
 
     #[test]
-    fn aggregate_replication_channels_reports_unknown_when_all_lag_null() {
-        let channels = vec![(None, 1, 1), (None, 1, 1)];
-        let (lag, io_running, sql_running) =
-            StatusCollector::aggregate_replica_channel_states(&channels);
+    fn counter_tracks_deltas_and_restarts() {
+        let collector = StatusCollector::new();
+        let last = AtomicI64::new(0);
 
-        assert_eq!(lag, -1);
-        assert_eq!(io_running, 1);
-        assert_eq!(sql_running, 1);
+        StatusCollector::set_counter_from_status(
+            &status(&[("Queries", "10")]),
+            "Queries",
+            &collector.queries_total,
+            &last,
+        );
+        assert_eq!(collector.queries_total.with_label_values(&NO_LABELS).get(), 10);
+
+        StatusCollector::set_counter_from_status(
+            &status(&[("Queries", "25")]),
+            "Queries",
+            &collector.queries_total,
+            &last,
+        );
+        assert_eq!(collector.queries_total.with_label_values(&NO_LABELS).get(), 25);
+
+        // Server restart: the source counter goes backwards, so the exported counter resets.
+        StatusCollector::set_counter_from_status(
+            &status(&[("Queries", "3")]),
+            "Queries",
+            &collector.queries_total,
+            &last,
+        );
+        assert_eq!(collector.queries_total.with_label_values(&NO_LABELS).get(), 3);
+        assert_eq!(last.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn counter_disappears_when_the_key_vanishes() {
+        let collector = StatusCollector::new();
+        let last = AtomicI64::new(0);
+
+        StatusCollector::set_counter_from_status(
+            &status(&[("Queries", "10")]),
+            "Queries",
+            &collector.queries_total,
+            &last,
+        );
+        StatusCollector::set_counter_from_status(
+            &status(&[]),
+            "Queries",
+            &collector.queries_total,
+            &last,
+        );
+
+        assert_eq!(published_samples(&collector.queries_total), 0);
+        assert_eq!(last.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn undefined_log_write_ratio_is_absent_rather_than_zero() {
+        let collector = StatusCollector::new();
+
+        collector.collect_innodb(&status(&[
+            ("Innodb_log_write_requests", "200"),
+            ("Innodb_log_writes", "50"),
+        ]));
+        assert_eq!(
+            collector
+                .innodb_log_write_ratio
+                .with_label_values(&NO_LABELS)
+                .get(),
+            25
+        );
+
+        // Zero write requests makes the ratio undefined; 0% would be a false claim.
+        collector.collect_innodb(&status(&[
+            ("Innodb_log_write_requests", "0"),
+            ("Innodb_log_writes", "50"),
+        ]));
+        assert_eq!(published_samples(&collector.innodb_log_write_ratio), 0);
+    }
+
+    #[test]
+    fn configuration_variables_are_republished_every_scrape() {
+        let collector = StatusCollector::new();
+        let mut vars = HashMap::new();
+        vars.insert("have_ssl".to_string(), "YES".to_string());
+        vars.insert("max_connections".to_string(), "151".to_string());
+
+        collector.collect_variables(&vars);
+        assert_eq!(collector.have_ssl.with_label_values(&NO_LABELS).get(), 1);
+        assert_eq!(
+            collector.max_connections.with_label_values(&NO_LABELS).get(),
+            151
+        );
+
+        // Previously latched on the first scrape; a later read must win.
+        vars.insert("have_ssl".to_string(), "DISABLED".to_string());
+        vars.insert("max_connections".to_string(), "500".to_string());
+        collector.collect_variables(&vars);
+        assert_eq!(collector.have_ssl.with_label_values(&NO_LABELS).get(), 0);
+        assert_eq!(
+            collector.max_connections.with_label_values(&NO_LABELS).get(),
+            500
+        );
+
+        // A variable missing from a successful read disappears.
+        collector.collect_variables(&HashMap::new());
+        assert_eq!(published_samples(&collector.have_ssl), 0);
     }
 }

@@ -26,10 +26,17 @@ just test
 ### Prerequisites
 
 - MariaDB 10.6+ / 11.x (via podman/docker or locally)
-- Rust toolchain (latest stable)
+- Rust toolchain (latest stable — see below)
 - `just` command runner (optional)
 - MariaDB client (`mariadb` + `mariadb-admin`) for the helper scripts —
   `scripts/install-mariadb-client.sh` installs it on Debian/Ubuntu
+
+> **Keep Rust on the latest stable.** CI lints with
+> `dtolnay/rust-toolchain@stable`, and this repo denies `clippy::pedantic`, so a
+> Rust release that adds a lint will fail CI on code your older local clippy
+> accepted. Run `just check-toolchain` to detect the drift and `just update-rust`
+> to fix it. This bites in the devcontainer in particular, where Rust comes from
+> the base image and `~/.rustup` is a volume that survives rebuilds.
 
 ### MariaDB
 

@@ -7,6 +7,8 @@ pub mod metadata;
 pub mod query_response_time;
 pub mod replication;
 pub mod schema;
+pub mod settlement;
 pub mod statements;
+pub mod system;
 pub mod tls;
 pub mod userstat;

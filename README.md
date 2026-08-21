@@ -14,6 +14,7 @@ MariaDB metrics exporter for Prometheus written in Rust.
 * **Lean defaults** – Essential availability, InnoDB, and replication metrics enabled by default; optional collectors opt-in.
 * **Low footprint** – Designed to minimize cardinality and avoid expensive scans.
 * **Resilient** – Always serves `/metrics` (HTTP 200) even when MariaDB is unreachable. During an outage, `mariadb_up` becomes `0`, and DB-dependent metrics are omitted to avoid stale data.
+* **No stale data** – A collector never serves a previous scrape's values as current. If its source becomes unavailable (plugin uninstalled, `performance_schema` table missing, feature disabled, privilege revoked) the series it owned *disappear* instead of freezing. See [Scrape outcomes](#scrape-outcomes).
 
 ## Download or build
 
@@ -105,6 +106,7 @@ Collectors are toggled with `--collector.<name>` or `--no-collector.<name>`.
 * `--collector.locks` – Metadata/table lock waits from `performance_schema`.
 * `--collector.metadata` – `metadata_lock_info` table counts.
 * `--collector.userstat` – Per-user stats (requires `@@userstat=1` and `USER_STATISTICS`).
+* `--collector.system` – Host CPU/memory/load and `MariaDB` process-group usage, read from the OS (never from the database). Only meaningful when the exporter runs on the database host. See [`src/collectors/system/README.md`](src/collectors/system/README.md).
 
 ### Enabled by default
 
@@ -135,7 +137,8 @@ mariadb_exporter \
   --collector.replication \
   --collector.locks \
   --collector.metadata \
-  --collector.userstat
+  --collector.userstat \
+  --collector.system
 ```
 
 Or using environment variables:
@@ -155,7 +158,8 @@ mariadb_exporter \
   --collector.replication \
   --collector.locks \
   --collector.metadata \
-  --collector.userstat
+  --collector.userstat \
+  --collector.system
 ```
 
 **Note:** Some collectors require additional privileges or database configuration:
@@ -166,6 +170,7 @@ mariadb_exporter \
 - `schema` – Queries `information_schema` (can be slow on large databases)
 - `locks`, `metadata` – Require `performance_schema` enabled
 - `userstat` – Requires `@@userstat=1` and `USER_STATISTICS` enabled
+- `system` – Reads the OS, not the database. Only enable it when the exporter runs on the same host as `MariaDB`; on managed services (RDS, SkySQL, …) it would describe the exporter's host instead
 
 ### InnoDB Advanced Metrics
 
@@ -197,6 +202,40 @@ The `--collector.innodb` provides deep visibility into InnoDB internals by parsi
 mariadb_exporter --collector.default --collector.innodb
 ```
 
+## Scrape outcomes
+
+Every collector reports one of three outcomes per scrape, and the exporter settles the
+registry accordingly.
+
+| Outcome | Meaning | Effect on the registry | `/metrics` |
+| --- | --- | --- | --- |
+| **Fresh** | The collector published a current snapshot. A successful *empty* result is Fresh when "zero rows" is the current truth. | The new snapshot replaces the old one; entities that vanished from a valid snapshot are removed. | Exposed as usual. |
+| **Skipped** | The collector published nothing because its source is known to be unavailable — plugin not installed, `performance_schema` table absent, feature disabled, privilege revoked. | Every series the collector owned is removed. | Those series are **absent**. Siblings are unaffected. |
+| **Err** | An unexpected or transient fault — lost connection, timeout, deadlock, malformed data, or a feature probe that itself failed. | The last good snapshot is **preserved** so the collector can resume. | HTTP 200 with `mariadb_up 1`, `# Error collecting metrics from '<name>': …` comments, and *only* the `mariadb_exporter_*` self-observation families. Database-dependent families are withheld for that scrape so a preserved snapshot is never timestamped as current. |
+
+Connectivity failure is unchanged: HTTP 200, `mariadb_up 0`, fresh exporter/build metrics,
+and no database metrics. `mariadb_up` is never fabricated to `0` because a collector failed
+— the connectivity check succeeded, so it stays `1`.
+
+### Alerting implications
+
+Because an unavailable source now yields **absence** rather than a stale or zero value,
+threshold alerts on those series go quiet instead of firing on stale data. Alerts that need
+to notice a disappearing source should use `absent()` / `absent_over_time()`, and scrape
+health should be watched with the exporter's own metrics:
+
+```promql
+# The exporter is up but a collector keeps failing.
+mariadb_exporter_collector_last_scrape_success == 0
+
+# A source that used to report has gone away.
+absent_over_time(mariadb_info_schema_query_response_time_seconds_count[10m])
+```
+
+An honest zero is still published where zero is a fact — for example `mariadb_ssl_server_configured 0`
+when TLS is genuinely not in use, or `mariadb_replica_configured 0` on a server with no
+replication. A zero is never published to stand in for "could not read".
+
 ## Project layout
 
 ```
@@ -217,6 +256,7 @@ mariadb_exporter
 │   ├── replication
 │   ├── schema
 │   ├── statements
+│   ├── system
 │   ├── tls
 │   ├── userstat
 │   └── util.rs

@@ -1,4 +1,4 @@
-use crate::collectors::Collector;
+use crate::collectors::{Collected, Collector};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use prometheus::Registry;
@@ -47,52 +47,27 @@ impl Collector for ReplicationCollector {
         fields(collector = "replication")
     )]
     fn register_metrics(&self, registry: &Registry) -> Result<()> {
-        // Replica status metrics
-        registry.register(Box::new(self.replica_status.relay_log_space().clone()))?;
-        registry.register(Box::new(self.replica_status.relay_log_pos().clone()))?;
-        registry.register(Box::new(self.replica_status.seconds_behind_master().clone()))?;
-        registry.register(Box::new(self.replica_status.io_running().clone()))?;
-        registry.register(Box::new(self.replica_status.sql_running().clone()))?;
-        registry.register(Box::new(self.replica_status.last_io_errno().clone()))?;
-        registry.register(Box::new(self.replica_status.last_sql_errno().clone()))?;
-        registry.register(Box::new(self.replica_status.master_server_id().clone()))?;
-        registry.register(Box::new(self.replica_status.replica_configured().clone()))?;
-        registry.register(Box::new(
-            self.replica_status.relay_log_space_by_channel().clone(),
-        ))?;
-        registry.register(Box::new(
-            self.replica_status.relay_log_pos_by_channel().clone(),
-        ))?;
-        registry.register(Box::new(
-            self.replica_status
-                .seconds_behind_master_by_channel()
-                .clone(),
-        ))?;
-        registry.register(Box::new(self.replica_status.io_running_by_channel().clone()))?;
-        registry.register(Box::new(self.replica_status.sql_running_by_channel().clone()))?;
-        registry.register(Box::new(
-            self.replica_status.last_io_errno_by_channel().clone(),
-        ))?;
-        registry.register(Box::new(
-            self.replica_status.last_sql_errno_by_channel().clone(),
-        ))?;
-        registry.register(Box::new(
-            self.replica_status.master_server_id_by_channel().clone(),
-        ))?;
-
-        // Binlog metrics
-        registry.register(Box::new(self.binlog.binlog_files().clone()))?;
-
+        self.replica_status.register_metrics(registry)?;
+        self.binlog.register_metrics(registry)?;
         Ok(())
     }
 
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "replication", otel.kind = "internal"))]
-    fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
+            // Replica state and binary-log state are independent sources: unavailable binlog
+            // data must not clear valid replica-state data, and vice versa. Calling the safe
+            // `collect` on each child settles them separately.
             self.replica_status.collect(pool).await?;
             self.binlog.collect(pool).await?;
-            Ok(())
+            Ok(Collected::Fresh)
         })
+    }
+
+    /// Fans out to the sub-collectors; this umbrella owns no metrics itself.
+    fn reset_metrics(&self) {
+        Collector::reset_metrics(&self.replica_status);
+        Collector::reset_metrics(&self.binlog);
     }
 
     fn enabled_by_default(&self) -> bool {

@@ -1,4 +1,4 @@
-use crate::collectors::{util::normalize_mariadb_version, Collector};
+use crate::collectors::{Collected, Collector, util::normalize_mariadb_version};
 use anyhow::{Result, anyhow};
 use futures::future::BoxFuture;
 use prometheus::{IntGauge, IntGaugeVec, Opts, Registry};
@@ -150,7 +150,7 @@ impl Collector for VersionCollector {
     }
 
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "version", otel.kind = "internal"))]
-    fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
             let span = info_span!(
                 "db.query",
@@ -174,8 +174,18 @@ impl Collector for VersionCollector {
                 version_num,
             );
 
-            Ok(())
+            Ok(Collected::Fresh)
         })
+    }
+
+    /// `SELECT VERSION()` needs no privilege and exists on every supported server, so this
+    /// collector has no skip path — a failure is a fault and must preserve the last known
+    /// version. The reset is still implemented so the version labels can be cleared if a
+    /// caller ever settles this collector; `mariadb_exporter_system_memory_total_bytes` is
+    /// read from the exporter host, not the database, so it is deliberately untouched.
+    fn reset_metrics(&self) {
+        self.mariadb_version_info.reset();
+        self.mariadb_version_num.reset();
     }
 
     fn enabled_by_default(&self) -> bool {

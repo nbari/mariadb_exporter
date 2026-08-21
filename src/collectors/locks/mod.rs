@@ -1,4 +1,4 @@
-use crate::collectors::Collector;
+use crate::collectors::{Collected, Collector};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use prometheus::Registry;
@@ -47,18 +47,26 @@ impl Collector for LocksCollector {
         fields(collector = "locks")
     )]
     fn register_metrics(&self, registry: &Registry) -> Result<()> {
-        registry.register(Box::new(self.metadata_locks.lock_count().clone()))?;
-        registry.register(Box::new(self.table_lock_waits.lock_waits().clone()))?;
+        self.metadata_locks.register_metrics(registry)?;
+        self.table_lock_waits.register_metrics(registry)?;
         Ok(())
     }
 
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "locks", otel.kind = "internal"))]
-    fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
+            // Each lock source settles on its own: a missing `metadata_locks` table must not
+            // erase freshly collected table-lock-wait data, and vice versa.
             self.metadata_locks.collect(pool).await?;
             self.table_lock_waits.collect(pool).await?;
-            Ok(())
+            Ok(Collected::Fresh)
         })
+    }
+
+    /// Fans out to the sub-collectors; this umbrella owns no metrics itself.
+    fn reset_metrics(&self) {
+        Collector::reset_metrics(&self.metadata_locks);
+        Collector::reset_metrics(&self.table_lock_waits);
     }
 
     fn enabled_by_default(&self) -> bool {

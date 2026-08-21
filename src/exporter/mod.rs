@@ -127,7 +127,7 @@ fn build_router(pool: sqlx::MySqlPool, registry: CollectorRegistry) -> Router {
             ServiceBuilder::new()
                 .layer(SetRequestHeaderLayer::if_not_present(
                     HeaderName::from_static("x-request-id"),
-                    |_req: &_| HeaderValue::from_str(Ulid::new().to_string().as_str()).ok(),
+                    |_req: &_| HeaderValue::from_str(Ulid::generate().to_string().as_str()).ok(),
                 ))
                 .layer(PropagateRequestIdLayer::new(HeaderName::from_static(
                     "x-request-id",

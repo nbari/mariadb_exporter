@@ -1,4 +1,4 @@
-use crate::collectors::Collector;
+use crate::collectors::{Collected, Collector};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use prometheus::Registry;
@@ -24,6 +24,12 @@ impl TlsCollector {
             ssl_status: SslStatusCollector::new(),
         }
     }
+
+    /// Access the SSL status sub-collector.
+    #[must_use]
+    pub const fn ssl_status(&self) -> &SslStatusCollector {
+        &self.ssl_status
+    }
 }
 
 impl Default for TlsCollector {
@@ -44,19 +50,21 @@ impl Collector for TlsCollector {
         fields(collector = "tls")
     )]
     fn register_metrics(&self, registry: &Registry) -> Result<()> {
-        registry.register(Box::new(self.ssl_status.server_configured().clone()))?;
-        registry.register(Box::new(self.ssl_status.version_info().clone()))?;
-        registry.register(Box::new(self.ssl_status.cert_not_before_seconds().clone()))?;
-        registry.register(Box::new(self.ssl_status.cert_not_after_seconds().clone()))?;
+        self.ssl_status.register_metrics(registry)?;
         Ok(())
     }
 
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "tls", otel.kind = "internal"))]
-    fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
             self.ssl_status.collect(pool).await?;
-            Ok(())
+            Ok(Collected::Fresh)
         })
+    }
+
+    /// Fans out to the sub-collector; this umbrella owns no metrics itself.
+    fn reset_metrics(&self) {
+        Collector::reset_metrics(&self.ssl_status);
     }
 
     fn enabled_by_default(&self) -> bool {

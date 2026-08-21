@@ -1,4 +1,4 @@
-use crate::collectors::Collector;
+use crate::collectors::{Collected, Collector};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use prometheus::Registry;
@@ -28,6 +28,12 @@ impl InnodbCollector {
             status: StatusParser::new(),
         }
     }
+
+    /// Access the underlying status parser.
+    #[must_use]
+    pub const fn status(&self) -> &StatusParser {
+        &self.status
+    }
 }
 
 impl Default for InnodbCollector {
@@ -48,24 +54,21 @@ impl Collector for InnodbCollector {
         fields(collector = "innodb")
     )]
     fn register_metrics(&self, registry: &Registry) -> Result<()> {
-        registry.register(Box::new(self.status.lsn_current().clone()))?;
-        registry.register(Box::new(self.status.lsn_flushed().clone()))?;
-        registry.register(Box::new(self.status.lsn_checkpoint().clone()))?;
-        registry.register(Box::new(self.status.checkpoint_age().clone()))?;
-        registry.register(Box::new(self.status.active_transactions().clone()))?;
-        registry.register(Box::new(self.status.semaphore_waits().clone()))?;
-        registry.register(Box::new(self.status.semaphore_wait_time_ms().clone()))?;
-        registry.register(Box::new(self.status.adaptive_hash_searches().clone()))?;
-        registry.register(Box::new(self.status.adaptive_hash_searches_btree().clone()))?;
+        self.status.register_metrics(registry)?;
         Ok(())
     }
 
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "innodb", otel.kind = "internal"))]
-    fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
             self.status.collect(pool).await?;
-            Ok(())
+            Ok(Collected::Fresh)
         })
+    }
+
+    /// Fans out to the sub-collector; this umbrella owns no metrics itself.
+    fn reset_metrics(&self) {
+        Collector::reset_metrics(&self.status);
     }
 
     fn enabled_by_default(&self) -> bool {

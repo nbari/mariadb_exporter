@@ -33,6 +33,33 @@ test: clippy fmt
 clippy:
   cargo clippy --all-targets --all-features
 
+# CI runs `dtolnay/rust-toolchain@stable`, so it always uses the newest stable
+# clippy. Each release adds lints, and this repo denies `clippy::pedantic`, so a
+# stale local toolchain passes `just clippy` while CI fails. The devcontainer is
+# especially prone to this: Rust comes from the base image and `.rustup` lives in a
+# named volume that survives rebuilds, so it never updates on its own.
+
+# Update the Rust toolchain to the latest stable (what CI lints with)
+update-rust:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  rustup update stable
+  rustup default stable
+  rustup component add rustfmt clippy rust-analyzer
+  echo "✅ $(rustc --version) / $(cargo clippy --version)"
+
+# Verify the local toolchain matches the latest stable that CI will lint with
+check-toolchain:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if rustup check | grep -q "update available"; then
+    echo "⚠️  Local Rust is behind the latest stable — CI lints with the newer one:"
+    rustup check | grep "update available" || true
+    echo "   Run: just update-rust"
+    exit 1
+  fi
+  echo "✅ toolchain is current: $(rustc --version)"
+
 # Formatting check
 fmt:
   cargo fmt --all -- --check
@@ -152,6 +179,13 @@ _bump bump_kind: check-develop check-clean clean update test
     echo "🧪 Running tests with new version (via just test)..."
     just test
 
+    echo "📊 Updating Grafana dashboard version to ${new_version}..."
+    jq --arg ver "${new_version}" '
+      .tags = ((.tags // []) | map(select(test("^[0-9]+\\.[0-9]+\\.[0-9]+") | not))) + [$ver] |
+      .version = .version + 1
+    ' grafana/dashboard.json > grafana/dashboard.json.tmp
+    mv grafana/dashboard.json.tmp grafana/dashboard.json
+
     git add .
     git commit -m "bump version to ${new_version}"
     git push origin develop
@@ -265,7 +299,7 @@ t-deploy message="CI test": check-develop check-clean test
 
 # Watch for changes and run
 watch:
-  cargo watch -x 'run -- --collector.default --collector.exporter --collector.tls --collector.query_response_time --collector.statements --collector.schema --collector.replication --collector.locks --collector.metadata --collector.userstat --collector.innodb -v'
+  cargo watch -x 'run -- --collector.default --collector.exporter --collector.tls --collector.query_response_time --collector.statements --collector.schema --collector.replication --collector.locks --collector.metadata --collector.userstat --collector.innodb --collector.system -v'
 
 # Bring up the on-demand devcontainer observability stack (Prometheus + Grafana).
 # Defined behind the "observability" profile in .devcontainer/compose.yaml so a plain

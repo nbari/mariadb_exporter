@@ -1,4 +1,4 @@
-use crate::collectors::Collector;
+use crate::collectors::{Collected, Collector};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use prometheus::{Gauge, IntGauge, Opts, Registry};
@@ -188,12 +188,16 @@ impl Collector for ProcessCollector {
     }
 
     #[instrument(skip(self, _pool), level = "debug")]
-    fn collect<'a>(&'a self, _pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, _pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
             self.collect_stats();
-            Ok(())
+            Ok(Collected::Fresh)
         })
     }
+
+    /// Deliberately a no-op: these metrics come from the exporter's own process, which is by
+    /// definition readable while the exporter is running, so there is no skip path.
+    fn reset_metrics(&self) {}
 
     fn enabled_by_default(&self) -> bool {
         false

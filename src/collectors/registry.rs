@@ -110,7 +110,6 @@ impl CollectorRegistry {
     /// # Errors
     ///
     /// Returns an error if metric collection or encoding fails
-    #[allow(clippy::too_many_lines)]
     #[instrument(skip(self, pool), level = "info", err, fields(otel.kind = "internal"))]
     pub async fn collect_all(&self, pool: &sqlx::MySqlPool) -> anyhow::Result<String> {
         // Increment scrape counter if scraper is available
@@ -208,7 +207,9 @@ impl CollectorRegistry {
             });
         }
 
-        // Drain completions as they finish (unordered).
+        // Drain *every* launched task before deciding what to expose, so a failure in one
+        // collector cannot leave siblings half-finished or their timers unrecorded.
+        let mut failures: Vec<(&'static str, String)> = Vec::new();
         while let Some((name, res)) = tasks.next().await {
             match res {
                 Ok(()) => {
@@ -217,31 +218,70 @@ impl CollectorRegistry {
 
                 Err(e) => {
                     error!("Collector '{}' failed: {}", name, e);
+                    failures.push((name, e.to_string()));
                 }
             }
         }
 
-        // Encode current registry into Prometheus exposition format.
+        self.render_exposition(db_up, &failures)
+    }
+
+    /// Renders the current registry into the Prometheus exposition format for one scrape.
+    ///
+    /// Split out of [`Self::collect_all`] so the withholding rules can be exercised
+    /// directly, without having to provoke a real collector failure against a live server.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if encoding the metric families fails.
+    fn render_exposition(
+        &self,
+        db_up: bool,
+        failures: &[(&'static str, String)],
+    ) -> anyhow::Result<String> {
         let encode_span = debug_span!("prometheus.encode");
         let guard = encode_span.enter();
 
         let encoder = TextEncoder::new();
         let metric_families = self.registry.gather();
 
-        // If DB is down, filter out DB-dependent metrics to avoid stale/zero data
-        let families_to_encode = if db_up {
-            metric_families
-        } else {
+        // Withhold database-dependent families when we cannot vouch for them:
+        //   * the database is unreachable — `mariadb_up 0` and nothing else, or
+        //   * a collector returned `Err`, so part of the registry is a preserved older
+        //     snapshot that must not be timestamped as current.
+        // A `Collected::Skipped` collector is *not* a failure: it is a successful scrape in
+        // which only that collector's unavailable series disappeared.
+        let withhold_db_families = !db_up || !failures.is_empty();
+
+        let families_to_encode = if withhold_db_families {
             metric_families
                 .into_iter()
                 .filter(|mf| {
                     let name = mf.name();
+                    // `mariadb_up` is exporter-owned self-observation rather than a collector
+                    // snapshot, and it is honest in both modes: `0` when the connectivity
+                    // check failed, `1` when it succeeded but a collector then failed. It is
+                    // never fabricated to `0` for a collector error.
                     name == "mariadb_up" || name.starts_with("mariadb_exporter_")
                 })
                 .collect()
+        } else {
+            metric_families
         };
 
         let mut buffer = Vec::new();
+
+        // Surface the failures as exposition comments. HTTP stays 200 (see the module docs
+        // on the intentional divergence from pg_exporter's 503), and the machine-readable
+        // signal remains `mariadb_exporter_collector_last_scrape_success` /
+        // `mariadb_exporter_collector_scrape_errors_total`, which are still exported.
+        for (name, message) in failures {
+            let sanitized = message.replace(['\n', '\r'], " ");
+            buffer.extend_from_slice(
+                format!("# Error collecting metrics from '{name}': {sanitized}\n").as_bytes(),
+            );
+        }
+
         encoder.encode(&families_to_encode, &mut buffer)?;
 
         // Update metrics count for next scrape
@@ -403,5 +443,134 @@ mod tests {
             .unwrap_or(0.0);
 
         assert!(count > 0.0);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod scrape_outcome_tests {
+    use super::*;
+    use crate::collectors::config::CollectorConfig;
+
+    /// Builds a registry holding the `exporter` collector and publishes one recognisable
+    /// database-owned sample so the withholding rules have something to withhold.
+    fn registry_with_a_published_db_sample() -> CollectorRegistry {
+        let config = CollectorConfig::new().with_enabled(&["exporter".to_string()]);
+        let registry = CollectorRegistry::new(&config);
+
+        // Simulate a previous successful scrape: a database-owned family carries a value.
+        let uptime = prometheus::IntGaugeVec::new(
+            Opts::new("mariadb_global_status_uptime_seconds", "test uptime"),
+            &[],
+        )
+        .unwrap();
+        uptime
+            .with_label_values(&crate::collectors::NO_LABELS)
+            .set(7);
+        registry.registry().register(Box::new(uptime)).unwrap();
+
+        registry.mariadb_up_gauge.set(1.0);
+        registry
+    }
+
+    #[test]
+    fn successful_scrape_exposes_database_families() {
+        let registry = registry_with_a_published_db_sample();
+
+        let body = registry.render_exposition(true, &[]).unwrap();
+
+        assert!(
+            body.contains("mariadb_global_status_uptime_seconds 7"),
+            "a scrape with no failures must expose database metrics, got:\n{body}"
+        );
+        assert!(body.contains("mariadb_up 1"));
+        assert!(
+            !body.contains("# Error collecting metrics"),
+            "no failures means no error comments"
+        );
+    }
+
+    /// A `Collected::Skipped` collector never reaches the failure list, so its siblings stay
+    /// visible; only the series it cleared are gone. This pins that a skip is a *successful*
+    /// scrape rather than an error.
+    #[test]
+    fn a_skip_is_not_a_failure_and_does_not_withhold_siblings() {
+        let registry = registry_with_a_published_db_sample();
+
+        // `render_exposition` is reached with an empty failure list for a skipped collector.
+        let body = registry.render_exposition(true, &[]).unwrap();
+
+        assert!(body.contains("mariadb_global_status_uptime_seconds 7"));
+    }
+
+    #[test]
+    fn collector_failure_keeps_http_200_shape_with_mariadb_up_1_and_no_db_samples() {
+        let registry = registry_with_a_published_db_sample();
+
+        let body = registry
+            .render_exposition(
+                true,
+                &[("statements", "connection reset by peer".to_string())],
+            )
+            .unwrap();
+
+        // Connectivity succeeded, so `mariadb_up` must stay 1 — never fabricated to 0.
+        assert!(
+            body.contains("mariadb_up 1"),
+            "collector failure must not fabricate mariadb_up 0, got:\n{body}"
+        );
+        // The preserved older snapshot must not be timestamped as current.
+        assert!(
+            !body.contains("mariadb_global_status_uptime_seconds 7"),
+            "a preserved snapshot must not be exposed after a collector error, got:\n{body}"
+        );
+        // The failure is visible to a human...
+        assert!(
+            body.contains("# Error collecting metrics from 'statements': connection reset by peer"),
+            "the failure must be surfaced as an exposition comment, got:\n{body}"
+        );
+        // ...and the exporter self-observation metrics stay available for alerting.
+        assert!(body.contains("mariadb_exporter_build_info"));
+        assert!(body.contains("mariadb_exporter_scrapes_total"));
+    }
+
+    #[test]
+    fn error_comments_never_break_the_exposition_format() {
+        let registry = registry_with_a_published_db_sample();
+
+        let body = registry
+            .render_exposition(
+                true,
+                &[("schema", "line one\nline two\rline three".to_string())],
+            )
+            .unwrap();
+
+        let comment_lines: Vec<&str> = body
+            .lines()
+            .filter(|l| l.starts_with("# Error collecting metrics"))
+            .collect();
+        assert_eq!(
+            comment_lines.len(),
+            1,
+            "a multi-line error must stay on a single comment line, got:\n{body}"
+        );
+        assert!(
+            comment_lines
+                .first()
+                .is_some_and(|line| line.contains("line one line two line three")),
+            "the sanitized message must survive, got:\n{body}"
+        );
+    }
+
+    #[test]
+    fn database_down_withholds_database_families_and_reports_mariadb_up_0() {
+        let registry = registry_with_a_published_db_sample();
+        registry.mariadb_up_gauge.set(0.0);
+
+        let body = registry.render_exposition(false, &[]).unwrap();
+
+        assert!(body.contains("mariadb_up 0"));
+        assert!(!body.contains("mariadb_global_status_uptime_seconds"));
+        assert!(body.contains("mariadb_exporter_build_info"));
     }
 }

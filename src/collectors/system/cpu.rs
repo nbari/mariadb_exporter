@@ -1,0 +1,777 @@
+//! Host CPU counters, core counts, and load average.
+//!
+//! CPU time is exposed as cumulative **per-core seconds counters**, mirroring
+//! `node_exporter`'s `node_cpu_seconds_total{cpu,mode}`. A single metric,
+//! `mariadb_system_cpu_seconds_total{cpu,mode}`, carries one series per logical
+//! core and mode; aggregate host utilization is derived in `PromQL`, so there is
+//! no separate aggregate metric and no flag to configure. Counters are
+//! scrape-interval independent and restart-safe: compute utilization with
+//! `rate()`/`irate()` over whatever window you choose, e.g. host-wide busy
+//! fraction:
+//!
+//! ```promql
+//! 1 - avg without(cpu)(rate(mariadb_system_cpu_seconds_total{mode="idle"}[5m]))
+//! ```
+//!
+//! or per-mode busy fraction normalized across all cores:
+//!
+//! ```promql
+//! avg without(cpu)(rate(mariadb_system_cpu_seconds_total{mode!="idle"}[5m]))
+//! ```
+//!
+//! The counters are read directly from the OS because `sysinfo` only exposes an
+//! instantaneous CPU percentage, not cumulative per-mode counters:
+//!
+//! - **Linux**: parses the per-core lines of `/proc/stat`. Modes: `user`,
+//!   `nice`, `system`, `idle`, `iowait`, `irq`, `softirq`, `steal`.
+//! - **FreeBSD**: reads the `kern.cp_times` (per-core) sysctl. Modes: `user`,
+//!   `nice`, `system`, `interrupt`, `idle`.
+//! - **Other platforms**: CPU counters are skipped (a one-time warning is
+//!   logged); memory and load average are still exported by the sibling
+//!   collectors.
+//!
+//! Cardinality is bounded per host (modes × cores) and does not scale with the
+//! number of schemas. Core counts (`mariadb_system_cpu_cores`,
+//! `mariadb_system_cpu_cores_physical`) let dashboards normalize load per core (a
+//! load of 8 saturates 1 core but is ~25% of 32 cores). Load average
+//! (`mariadb_system_load1/5/15`) comes from `sysinfo`.
+
+use crate::collectors::{Collected, Collector};
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+use crate::collectors::i64_to_f64;
+use anyhow::Result;
+use futures::future::BoxFuture;
+use prometheus::{CounterVec, Gauge, IntGauge, Opts, Registry};
+use sqlx::MySqlPool;
+use std::collections::{HashMap, HashSet};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
+use sysinfo::System;
+use tracing::{debug, instrument, warn};
+
+/// Cumulative CPU time per mode for one logical core.
+struct CoreTimes {
+    /// Logical core id used as the `cpu` label value: `"0"`, `"1"`, ...
+    cpu: String,
+    /// `(mode, seconds)` pairs. `seconds` is cumulative since boot.
+    modes: Vec<(&'static str, f64)>,
+}
+
+/// Converts raw clock ticks to seconds.
+///
+/// Tick counts since boot stay far below `2^53`, so the widening performed by
+/// [`i64_to_f64`] is exact for any realistic uptime.
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[inline]
+pub(super) fn ticks_to_seconds(ticks: u64, hz: f64) -> f64 {
+    if hz > 0.0 {
+        i64_to_f64(i64::try_from(ticks).unwrap_or(i64::MAX)) / hz
+    } else {
+        0.0
+    }
+}
+
+#[cfg(target_os = "linux")]
+const LINUX_MODES: [&str; 8] = [
+    "user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal",
+];
+
+#[cfg(target_os = "freebsd")]
+const FREEBSD_MODES: [&str; 5] = ["user", "nice", "system", "interrupt", "idle"];
+
+/// An idle decrease of this size indicates CPU hotplug/reset rather than the
+/// small accounting regressions that `/proc/stat` may occasionally report.
+const IDLE_RESET_THRESHOLD_SECONDS: f64 = 3.0;
+
+/// Returns the clock-tick frequency (`_SC_CLK_TCK`, jiffies per second) used to
+/// scale `/proc/stat` counters, defaulting to the near-universal 100 Hz.
+#[cfg(target_os = "linux")]
+fn clk_tck() -> f64 {
+    // SAFETY: `sysconf` is a pure, thread-safe query with no side effects.
+    let ticks = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
+    if ticks > 0 { i64_to_f64(ticks) } else { 100.0 }
+}
+
+/// Parses the per-core CPU lines of `/proc/stat` into cumulative times.
+///
+/// The bare `cpu` aggregate line is skipped: only per-core series are exported,
+/// and the host-wide aggregate is derived in `PromQL`. Kept pure (string in,
+/// values out) so it is unit-testable without `/proc`.
+#[cfg(target_os = "linux")]
+fn parse_proc_stat(content: &str, hz: f64) -> Vec<CoreTimes> {
+    let mut out = Vec::new();
+
+    for line in content.lines() {
+        let mut fields = line.split_whitespace();
+        let Some(label) = fields.next() else {
+            continue;
+        };
+        let Some(suffix) = label.strip_prefix("cpu") else {
+            // CPU lines are the first entries in /proc/stat; stop at the first
+            // non-cpu line (intr, ctxt, ...).
+            break;
+        };
+        if suffix.is_empty() {
+            // The bare `cpu` line is the host-wide aggregate; skip it.
+            continue;
+        }
+
+        let mut modes = Vec::with_capacity(LINUX_MODES.len());
+        for &name in &LINUX_MODES {
+            let jiffies = fields
+                .next()
+                .and_then(|value| value.parse::<u64>().ok())
+                .unwrap_or(0);
+            modes.push((name, ticks_to_seconds(jiffies, hz)));
+        }
+
+        out.push(CoreTimes {
+            cpu: suffix.to_owned(),
+            modes,
+        });
+    }
+
+    out
+}
+
+#[cfg(target_os = "linux")]
+fn read_cpu_times() -> Result<Vec<CoreTimes>> {
+    let hz = clk_tck();
+    let content = std::fs::read_to_string("/proc/stat")?;
+    Ok(parse_proc_stat(&content, hz))
+}
+
+#[cfg(target_os = "freebsd")]
+#[repr(C)]
+struct Clockinfo {
+    hz: i32,
+    tick: i32,
+    spare: i32,
+    stathz: i32,
+    profhz: i32,
+}
+
+/// Reads a raw sysctl value by name into a byte buffer.
+#[cfg(target_os = "freebsd")]
+fn sysctl_raw(name: &str) -> Result<Vec<u8>> {
+    use anyhow::anyhow;
+    use std::ffi::CString;
+
+    let cname = CString::new(name)?;
+    let mut len: libc::size_t = 0;
+
+    // SAFETY: passing a null oldp asks the kernel for the value's size only.
+    let rc = unsafe {
+        libc::sysctlbyname(
+            cname.as_ptr(),
+            std::ptr::null_mut(),
+            &raw mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if rc != 0 {
+        return Err(anyhow!("sysctlbyname({name}) size query failed"));
+    }
+
+    let mut buf = vec![0u8; len];
+    // SAFETY: buf has capacity `len` bytes, matching the size query above.
+    let rc = unsafe {
+        libc::sysctlbyname(
+            cname.as_ptr(),
+            buf.as_mut_ptr().cast(),
+            &raw mut len,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if rc != 0 {
+        return Err(anyhow!("sysctlbyname({name}) read failed"));
+    }
+
+    buf.truncate(len);
+    Ok(buf)
+}
+
+/// Reads a sysctl whose value is an array of C `long` counters.
+#[cfg(target_os = "freebsd")]
+fn sysctl_longs(name: &str) -> Result<Vec<i64>> {
+    let raw = sysctl_raw(name)?;
+    let width = std::mem::size_of::<libc::c_long>();
+    let mut out = Vec::with_capacity(raw.len() / width.max(1));
+
+    for chunk in raw.chunks_exact(width) {
+        let mut bytes = [0u8; 8];
+        for (dst, src) in bytes.iter_mut().zip(chunk.iter()) {
+            *dst = *src;
+        }
+        out.push(i64::from_ne_bytes(bytes));
+    }
+
+    Ok(out)
+}
+
+/// Returns the frequency (Hz) at which `kern.cp_time*` counters advance,
+/// preferring the statistics clock (`stathz`) and falling back to `hz`.
+#[cfg(target_os = "freebsd")]
+fn freebsd_cpufreq() -> Result<f64> {
+    use anyhow::anyhow;
+
+    let raw = sysctl_raw("kern.clockrate")?;
+    if raw.len() < std::mem::size_of::<Clockinfo>() {
+        return Err(anyhow!(
+            "kern.clockrate returned {} bytes, expected at least {}",
+            raw.len(),
+            std::mem::size_of::<Clockinfo>()
+        ));
+    }
+
+    // SAFETY: the buffer is at least sizeof(Clockinfo) bytes and Clockinfo is a
+    // repr(C) plain-old-data struct; read_unaligned avoids alignment issues.
+    let clock: Clockinfo = unsafe { std::ptr::read_unaligned(raw.as_ptr().cast()) };
+    let freq = if clock.stathz > 0 {
+        clock.stathz
+    } else {
+        clock.hz
+    };
+
+    if freq > 0 {
+        Ok(f64::from(freq))
+    } else {
+        Ok(128.0)
+    }
+}
+
+#[cfg(target_os = "freebsd")]
+fn build_core_times(cpu: String, vals: &[i64], hz: f64) -> CoreTimes {
+    let mut modes = Vec::with_capacity(FREEBSD_MODES.len());
+    for (idx, &name) in FREEBSD_MODES.iter().enumerate() {
+        let raw = vals.get(idx).copied().unwrap_or(0);
+        let ticks = u64::try_from(raw).unwrap_or(0);
+        modes.push((name, ticks_to_seconds(ticks, hz)));
+    }
+    CoreTimes { cpu, modes }
+}
+
+#[cfg(target_os = "freebsd")]
+fn read_cpu_times() -> Result<Vec<CoreTimes>> {
+    let hz = freebsd_cpufreq()?;
+    let mut out = Vec::new();
+
+    // Only per-core counters (kern.cp_times) are exported; the host-wide
+    // aggregate is derived in PromQL.
+    let per = sysctl_longs("kern.cp_times")?;
+    for (index, chunk) in per.chunks(FREEBSD_MODES.len()).enumerate() {
+        out.push(build_core_times(index.to_string(), chunk, hz));
+    }
+
+    Ok(out)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+fn read_cpu_times() -> Vec<CoreTimes> {
+    // CPU counters are only implemented for Linux and FreeBSD. The caller logs a
+    // one-time warning; memory and load average are still exported.
+    Vec::new()
+}
+
+/// Exposes host CPU counters, core counts, and load average.
+///
+/// **Counter (cumulative seconds):**
+/// - `mariadb_system_cpu_seconds_total{cpu,mode}` — one series per logical core,
+///   mirroring `node_exporter`'s `node_cpu_seconds_total`
+///
+/// **Gauges:**
+/// - `mariadb_system_cpu_cores` (logical cores)
+/// - `mariadb_system_cpu_cores_physical` (physical cores)
+/// - `mariadb_system_load1`, `mariadb_system_load5`, `mariadb_system_load15`
+#[derive(Clone)]
+pub struct CpuCollector {
+    cpu_seconds: CounterVec,
+    cpu_cores: IntGauge,
+    cpu_cores_physical: IntGauge,
+    load1: Gauge,
+    load5: Gauge,
+    load15: Gauge,
+    /// Last raw OS values by CPU and mode. Exported counters advance only by
+    /// positive deltas so kernel accounting regressions cannot create spikes.
+    raw_cpu_seconds: Arc<Mutex<HashMap<String, HashMap<&'static str, f64>>>>,
+    /// Ensures the "CPU counters unsupported on this platform" warning is logged
+    /// at most once per process instead of on every scrape.
+    unsupported_warned: Arc<AtomicBool>,
+}
+
+impl CpuCollector {
+    /// Creates a new `CpuCollector`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if metric creation fails, which only happens with an invalid
+    /// metric name or label set and therefore never at runtime.
+    #[must_use]
+    #[allow(clippy::expect_used)]
+    pub fn new() -> Self {
+        Self {
+            cpu_seconds: CounterVec::new(
+                Opts::new(
+                    "mariadb_system_cpu_seconds_total",
+                    "Cumulative host CPU time in seconds per logical core, by mode",
+                ),
+                &["cpu", "mode"],
+            )
+            .expect("mariadb_system_cpu_seconds_total"),
+            cpu_cores: IntGauge::with_opts(Opts::new(
+                "mariadb_system_cpu_cores",
+                "Number of logical CPU cores on the host",
+            ))
+            .expect("mariadb_system_cpu_cores"),
+            cpu_cores_physical: IntGauge::with_opts(Opts::new(
+                "mariadb_system_cpu_cores_physical",
+                "Number of physical CPU cores on the host",
+            ))
+            .expect("mariadb_system_cpu_cores_physical"),
+            load1: Gauge::with_opts(Opts::new(
+                "mariadb_system_load1",
+                "Host load average over the last 1 minute",
+            ))
+            .expect("mariadb_system_load1"),
+            load5: Gauge::with_opts(Opts::new(
+                "mariadb_system_load5",
+                "Host load average over the last 5 minutes",
+            ))
+            .expect("mariadb_system_load5"),
+            load15: Gauge::with_opts(Opts::new(
+                "mariadb_system_load15",
+                "Host load average over the last 15 minutes",
+            ))
+            .expect("mariadb_system_load15"),
+            raw_cpu_seconds: Arc::new(Mutex::new(HashMap::new())),
+            unsupported_warned: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    fn update_cores(&self, logical: usize) {
+        let physical = System::physical_core_count().unwrap_or(logical);
+        self.cpu_cores
+            .set(i64::try_from(logical).unwrap_or(i64::MAX));
+        self.cpu_cores_physical
+            .set(i64::try_from(physical).unwrap_or(i64::MAX));
+    }
+
+    fn update_load(&self) {
+        let load = System::load_average();
+        self.load1.set(load.one);
+        self.load5.set(load.five);
+        self.load15.set(load.fifteen);
+    }
+
+    fn apply_cpu_times(&self, times: &[CoreTimes]) {
+        self.update_cores(times.len());
+
+        let mut previous = match self.raw_cpu_seconds.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                warn!("system CPU mutex was poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+
+        let live_cpus: HashSet<&str> = times.iter().map(|entry| entry.cpu.as_str()).collect();
+        let offline_cpus: Vec<String> = previous
+            .keys()
+            .filter(|cpu| !live_cpus.contains(cpu.as_str()))
+            .cloned()
+            .collect();
+
+        for cpu in offline_cpus {
+            if let Some(modes) = previous.remove(cpu.as_str()) {
+                for mode in modes.keys() {
+                    if let Err(error) = self.cpu_seconds.remove_label_values(&[cpu.as_str(), *mode])
+                    {
+                        warn!(cpu, mode, %error, "failed to remove offline CPU series");
+                    }
+                }
+            }
+        }
+
+        for entry in times {
+            let previous_modes = previous.entry(entry.cpu.clone()).or_default();
+            let reset = entry.modes.iter().any(|&(mode, seconds)| {
+                mode == "idle"
+                    && previous_modes.get(mode).is_some_and(|previous_idle| {
+                        *previous_idle - seconds >= IDLE_RESET_THRESHOLD_SECONDS
+                    })
+            });
+
+            if reset {
+                debug!(cpu = %entry.cpu, "host CPU counters reset after hotplug");
+            }
+
+            for &(mode, seconds) in &entry.modes {
+                let previous_value = previous_modes.get(mode).copied();
+
+                if reset {
+                    previous_modes.insert(mode, seconds);
+                    continue;
+                }
+
+                match previous_value {
+                    None => {
+                        self.cpu_seconds
+                            .with_label_values(&[entry.cpu.as_str(), mode])
+                            .inc_by(seconds);
+                        previous_modes.insert(mode, seconds);
+                    }
+                    Some(value) if seconds >= value => {
+                        let delta = seconds - value;
+                        if delta > 0.0 {
+                            self.cpu_seconds
+                                .with_label_values(&[entry.cpu.as_str(), mode])
+                                .inc_by(delta);
+                        }
+                        previous_modes.insert(mode, seconds);
+                    }
+                    Some(value) => {
+                        debug!(
+                            cpu = %entry.cpu,
+                            mode,
+                            previous = value,
+                            current = seconds,
+                            "ignored backwards host CPU counter"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Drops every per-core series and the deltas backing them.
+    ///
+    /// Used when the OS cannot provide per-core counters at all, so the series
+    /// disappear instead of being served at their last known value forever.
+    fn clear_cpu_seconds(&self) {
+        self.cpu_seconds.reset();
+        match self.raw_cpu_seconds.lock() {
+            Ok(mut guard) => guard.clear(),
+            Err(poisoned) => {
+                warn!("system CPU mutex was poisoned, recovering");
+                poisoned.into_inner().clear();
+            }
+        }
+    }
+
+    fn update_cpu_seconds(&self) {
+        // Platforms without a per-core CPU source cannot fail this read, so they
+        // hand back a plain (empty) vector and take the `Ok(_)` arm below.
+        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+        let sampled = read_cpu_times();
+        #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+        let sampled: Result<Vec<CoreTimes>> = Ok(read_cpu_times());
+
+        match sampled {
+            Ok(times) if !times.is_empty() => {
+                self.apply_cpu_times(&times);
+                debug!(cores = times.len(), "updated host CPU counters");
+            }
+            Ok(_) => {
+                let logical =
+                    std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+                self.update_cores(logical);
+                // Known-unavailable source: remove the series rather than serve
+                // stale per-core counters as if they were current.
+                self.clear_cpu_seconds();
+                if !self.unsupported_warned.swap(true, Ordering::Relaxed) {
+                    warn!(
+                        "collector.system CPU counters are not supported on this platform; \
+                         only memory and load average will be exported"
+                    );
+                }
+            }
+            Err(ref error) => {
+                // A transient read fault preserves the last good snapshot, matching the
+                // `Err` half of the settlement contract. It is deliberately not
+                // propagated: this optional host collector never touches MariaDB, and an
+                // unreadable `/proc` must not withhold the database metrics for the scrape.
+                warn!(error = %error, "failed to read host CPU counters");
+            }
+        }
+    }
+
+    fn collect_stats(&self) {
+        self.update_load();
+        self.update_cpu_seconds();
+    }
+}
+
+impl Default for CpuCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Collector for CpuCollector {
+    fn name(&self) -> &'static str {
+        "system.cpu"
+    }
+
+    #[instrument(skip(self, registry), level = "info", err, fields(collector = "system.cpu"))]
+    fn register_metrics(&self, registry: &Registry) -> Result<()> {
+        registry.register(Box::new(self.cpu_seconds.clone()))?;
+        registry.register(Box::new(self.cpu_cores.clone()))?;
+        registry.register(Box::new(self.cpu_cores_physical.clone()))?;
+        registry.register(Box::new(self.load1.clone()))?;
+        registry.register(Box::new(self.load5.clone()))?;
+        registry.register(Box::new(self.load15.clone()))?;
+        Ok(())
+    }
+
+    /// Always `Fresh`: core count and load average come from `sysinfo` and are
+    /// published on every platform, so this collector always refreshes part of
+    /// its surface. The per-core counters settle on their own inside
+    /// [`Self::update_cpu_seconds`].
+    #[instrument(skip(self, _pool), level = "debug")]
+    fn collect_once<'a>(&'a self, _pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
+        Box::pin(async move {
+            self.collect_stats();
+            Ok(Collected::Fresh)
+        })
+    }
+
+    /// Removes every labeled series this collector owns.
+    fn reset_metrics(&self) {
+        self.clear_cpu_seconds();
+    }
+
+    fn enabled_by_default(&self) -> bool {
+        false
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    fn core_times(cpu: &str, user: f64, idle: f64) -> CoreTimes {
+        CoreTimes {
+            cpu: cpu.to_owned(),
+            modes: vec![("user", user), ("idle", idle)],
+        }
+    }
+
+    #[test]
+    fn collector_name_is_system_cpu() {
+        assert_eq!(CpuCollector::new().name(), "system.cpu");
+    }
+
+    #[test]
+    fn collector_is_disabled_by_default() {
+        assert!(!CpuCollector::new().enabled_by_default());
+    }
+
+    #[test]
+    fn register_metrics_succeeds() {
+        let registry = Registry::new();
+        assert!(CpuCollector::new().register_metrics(&registry).is_ok());
+    }
+
+    #[test]
+    fn cpu_seconds_has_counter_metadata() {
+        let collector = CpuCollector::new();
+        let registry = Registry::new();
+        assert!(collector.register_metrics(&registry).is_ok());
+        collector.apply_cpu_times(&[core_times("0", 10.0, 90.0)]);
+
+        let family = registry
+            .gather()
+            .into_iter()
+            .find(|family| family.name() == "mariadb_system_cpu_seconds_total");
+        assert!(
+            family.is_some_and(|family| {
+                family.get_field_type() == prometheus::proto::MetricType::COUNTER
+            }),
+            "CPU seconds must be exposed as a counter"
+        );
+    }
+
+    #[test]
+    fn cpu_counters_ignore_small_backwards_readings() {
+        let collector = CpuCollector::new();
+        collector.apply_cpu_times(&[core_times("0", 10.0, 90.0)]);
+        collector.apply_cpu_times(&[core_times("0", 9.5, 89.5)]);
+
+        assert!(
+            (collector.cpu_seconds.with_label_values(&["0", "user"]).get() - 10.0).abs()
+                < f64::EPSILON
+        );
+
+        collector.apply_cpu_times(&[core_times("0", 11.0, 91.0)]);
+        assert!(
+            (collector.cpu_seconds.with_label_values(&["0", "user"]).get() - 11.0).abs()
+                < f64::EPSILON
+        );
+    }
+
+    #[test]
+    fn cpu_counters_rebaseline_after_hotplug_reset() {
+        let collector = CpuCollector::new();
+        collector.apply_cpu_times(&[core_times("0", 10.0, 90.0)]);
+        collector.apply_cpu_times(&[core_times("0", 1.0, 1.0)]);
+
+        assert!(
+            (collector.cpu_seconds.with_label_values(&["0", "user"]).get() - 10.0).abs()
+                < f64::EPSILON
+        );
+
+        collector.apply_cpu_times(&[core_times("0", 2.0, 2.0)]);
+        assert!(
+            (collector.cpu_seconds.with_label_values(&["0", "user"]).get() - 11.0).abs()
+                < f64::EPSILON
+        );
+    }
+
+    #[test]
+    fn logical_core_count_comes_from_cpu_sample() {
+        let collector = CpuCollector::new();
+        collector.apply_cpu_times(&[core_times("0", 10.0, 90.0), core_times("1", 20.0, 80.0)]);
+
+        assert_eq!(collector.cpu_cores.get(), 2);
+    }
+
+    #[test]
+    fn offline_cpu_series_are_removed() {
+        let collector = CpuCollector::new();
+        let registry = Registry::new();
+        assert!(collector.register_metrics(&registry).is_ok());
+        collector.apply_cpu_times(&[core_times("0", 10.0, 90.0), core_times("1", 20.0, 80.0)]);
+        collector.apply_cpu_times(&[core_times("0", 11.0, 91.0)]);
+
+        let has_cpu_one = registry.gather().iter().any(|family| {
+            family.name() == "mariadb_system_cpu_seconds_total"
+                && family.get_metric().iter().any(|metric| {
+                    metric
+                        .get_label()
+                        .iter()
+                        .any(|label| label.name() == "cpu" && label.value() == "1")
+                })
+        });
+        assert!(!has_cpu_one, "offline CPU series must be removed");
+    }
+
+    #[test]
+    fn reset_metrics_removes_every_core_series() {
+        let collector = CpuCollector::new();
+        let registry = Registry::new();
+        assert!(collector.register_metrics(&registry).is_ok());
+        collector.apply_cpu_times(&[core_times("0", 10.0, 90.0), core_times("1", 20.0, 80.0)]);
+
+        Collector::reset_metrics(&collector);
+
+        let still_present = registry
+            .gather()
+            .iter()
+            .any(|family| family.name() == "mariadb_system_cpu_seconds_total");
+        assert!(
+            !still_present,
+            "an empty counter family must not be gathered at all"
+        );
+    }
+
+    #[test]
+    fn reset_clears_the_delta_baseline_so_counters_restart_cleanly() {
+        let collector = CpuCollector::new();
+        collector.apply_cpu_times(&[core_times("0", 10.0, 90.0)]);
+        Collector::reset_metrics(&collector);
+
+        // With the baseline cleared, the next sample seeds a fresh counter at its
+        // full value rather than reporting a zero delta against a stale baseline.
+        collector.apply_cpu_times(&[core_times("0", 12.0, 92.0)]);
+        assert!(
+            (collector.cpu_seconds.with_label_values(&["0", "user"]).get() - 12.0).abs()
+                < f64::EPSILON
+        );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[test]
+    fn ticks_to_seconds_guards_zero_hz() {
+        assert!((ticks_to_seconds(1000, 0.0) - 0.0).abs() < f64::EPSILON);
+        assert!((ticks_to_seconds(1000, 100.0) - 10.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn collect_stats_populates_load_and_cores() {
+        let collector = CpuCollector::new();
+        collector.collect_stats();
+
+        assert!(collector.cpu_cores.get() >= 1);
+        assert!(collector.cpu_cores_physical.get() >= 1);
+        assert!(collector.load1.get() >= 0.0);
+        assert!(collector.load5.get() >= 0.0);
+        assert!(collector.load15.get() >= 0.0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn collect_stats_populates_cpu_seconds_on_linux() {
+        let collector = CpuCollector::new();
+        collector.collect_stats();
+
+        // Core 0 always exists on Linux; idle seconds are cumulative since boot.
+        let idle = collector.cpu_seconds.with_label_values(&["0", "idle"]).get();
+        assert!(idle > 0.0, "expected non-zero cumulative idle seconds");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parse_proc_stat_skips_aggregate_and_reads_cores() {
+        let sample = "\
+cpu  100 200 300 400 500 60 70 80 0 0
+cpu0 50 100 150 200 250 30 35 40 0 0
+cpu1 50 100 150 200 250 30 35 40 0 0
+intr 12345 0 0
+ctxt 67890
+";
+        let times = parse_proc_stat(sample, 100.0);
+        assert_eq!(times.len(), 2, "aggregate skipped, two cores kept");
+
+        let core_ids: Vec<&str> = times.iter().map(|entry| entry.cpu.as_str()).collect();
+        assert_eq!(core_ids, vec!["0", "1"]);
+
+        let first_core = times.first().expect("core 0 entry");
+        assert_eq!(first_core.modes.len(), LINUX_MODES.len());
+
+        // user = 50 jiffies / 100 Hz = 0.5s; idle = 200 / 100 = 2.0s.
+        let user = first_core
+            .modes
+            .iter()
+            .find(|(mode, _)| *mode == "user")
+            .map_or(-1.0, |(_, seconds)| *seconds);
+        let idle = first_core
+            .modes
+            .iter()
+            .find(|(mode, _)| *mode == "idle")
+            .map_or(-1.0, |(_, seconds)| *seconds);
+        assert!((user - 0.5).abs() < f64::EPSILON);
+        assert!((idle - 2.0).abs() < f64::EPSILON);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parse_proc_stat_tolerates_missing_fields() {
+        // Truncated per-core line: missing modes must default to zero, not panic.
+        let sample = "cpu0 100 200\n";
+        let times = parse_proc_stat(sample, 100.0);
+        let core0 = times.first().expect("core 0 entry");
+        assert_eq!(core0.modes.len(), LINUX_MODES.len());
+
+        let steal = core0
+            .modes
+            .iter()
+            .find(|(mode, _)| *mode == "steal")
+            .map_or(-1.0, |(_, seconds)| *seconds);
+        assert!((steal - 0.0).abs() < f64::EPSILON);
+    }
+}

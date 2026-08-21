@@ -1,4 +1,4 @@
-use crate::collectors::Collector;
+use crate::collectors::{Collected, Collector};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use prometheus::Registry;
@@ -42,18 +42,21 @@ impl Collector for QueryResponseTimeCollector {
         fields(collector = "query_response_time")
     )]
     fn register_metrics(&self, registry: &Registry) -> Result<()> {
-        registry.register(Box::new(self.response_time.response_time_bucket().clone()))?;
-        registry.register(Box::new(self.response_time.response_time_count().clone()))?;
-        registry.register(Box::new(self.response_time.response_time_sum().clone()))?;
+        self.response_time.register_metrics(registry)?;
         Ok(())
     }
 
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "query_response_time", otel.kind = "internal"))]
-    fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
             self.response_time.collect(pool).await?;
-            Ok(())
+            Ok(Collected::Fresh)
         })
+    }
+
+    /// Fans out to the sub-collector; this umbrella owns no metrics itself.
+    fn reset_metrics(&self) {
+        Collector::reset_metrics(&self.response_time);
     }
 
     fn enabled_by_default(&self) -> bool {

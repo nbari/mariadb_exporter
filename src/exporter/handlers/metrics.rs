@@ -25,10 +25,14 @@ pub async fn metrics(
         }
         Err(e) => {
             error!("Failed to collect metrics: {}", e);
+            // The scrape reached this branch only if encoding itself failed, so the database
+            // state could not be represented safely. Emitting `mariadb_up 0` here would
+            // fabricate an outage that was never observed — the comment is the honest answer.
+            let sanitized = e.to_string().replace(['\n', '\r'], " ");
             (
                 StatusCode::OK,
                 headers,
-                format!("# Error collecting metrics: {e}\nmariadb_up 0\n"),
+                format!("# Error collecting metrics: {sanitized}\n"),
             )
         }
     }

@@ -75,6 +75,13 @@ IMAGE_RUSTUP="$(command -v rustup || echo /usr/local/cargo/bin/rustup)"
 case "$IMAGE_RUSTUP" in
 */.local/share/mise/*) IMAGE_RUSTUP=/usr/local/cargo/bin/rustup ;;
 esac
+#    Track the latest stable first: CI uses `dtolnay/rust-toolchain@stable`, so a
+#    devcontainer left on the base image's older toolchain silently lints against a
+#    smaller set of clippy lints than CI does and lets CI-only failures through.
+#    The .rustup volume persists across rebuilds, so pulling a newer base image is
+#    NOT enough on its own — the update has to be explicit.
+"$IMAGE_RUSTUP" update stable || echo "rustup update stable failed (offline?), continuing." >&2
+"$IMAGE_RUSTUP" default stable || true
 "$IMAGE_RUSTUP" component add rustfmt clippy rust-analyzer
 
 # Make the mise shims available to login/non-login shells.

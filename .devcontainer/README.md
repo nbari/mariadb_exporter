@@ -61,6 +61,27 @@ your dotfiles with [chezmoi](https://chezmoi.io) (repo from `DEVPOD_DOTFILES`,
 default `https://github.com/nbari/dotfiles-devpod.git`) so the shell, prompt, and
 nvim config match your host. `zsh` is the default shell.
 
+### Rust toolchain: keep it on the latest stable
+
+Rust itself is **not** managed by mise — it comes from the base image
+(`mcr.microsoft.com/devcontainers/rust:trixie`), and `~/.rustup` is a named volume
+that survives container rebuilds. Two consequences:
+
+- pulling a newer base image does **not** update Rust once the volume exists;
+- the container can silently fall behind the latest stable.
+
+That matters because CI lints with `dtolnay/rust-toolchain@stable` — always the
+newest stable clippy. Since this repo denies `clippy::pedantic`, every Rust release
+that adds a lint can fail CI on code that `just clippy` accepted locally.
+
+`postcreate.sh` now runs `rustup update stable` when the container is created. To
+refresh an existing container without rebuilding:
+
+```bash
+just update-rust      # rustup update stable + re-add clippy/rustfmt/rust-analyzer
+just check-toolchain  # fails if the local toolchain is behind the latest stable
+```
+
 ## Usage
 
 ### Local (Linux / macOS / fedora-atomic)

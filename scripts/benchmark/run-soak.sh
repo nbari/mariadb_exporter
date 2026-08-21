@@ -197,7 +197,7 @@ ensure_exporter() {
         --collector.default --collector.exporter --collector.innodb \
         --collector.replication --collector.locks --collector.metadata \
         --collector.schema --collector.userstat --collector.query_response_time \
-        --collector.statements --collector.tls \
+        --collector.statements --collector.tls --collector.system \
         >"${ARTIFACT_DIR}/exporter.log" 2>&1 &
     EXPORTER_PID=$!
     STARTED_EXPORTER=true

@@ -1,4 +1,4 @@
-use crate::collectors::Collector;
+use crate::collectors::{Collected, Collector};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -17,6 +17,9 @@ use status::StatusCollector;
 pub mod plugins;
 use plugins::PluginsCollector;
 
+pub mod replication;
+use replication::ReplicationCollector;
+
 /// `DefaultCollector` bundles lightweight always-on signals.
 #[derive(Clone, Default)]
 pub struct DefaultCollector {
@@ -31,6 +34,7 @@ impl DefaultCollector {
                 Arc::new(VersionCollector::new()),
                 Arc::new(StatusCollector::new()),
                 Arc::new(PluginsCollector::new()),
+                Arc::new(ReplicationCollector::new()),
             ],
         }
     }
@@ -64,12 +68,14 @@ impl Collector for DefaultCollector {
     }
 
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "default", otel.kind = "internal"))]
-    fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
             let mut tasks = FuturesUnordered::new();
 
             for sub in &self.subs {
                 let span = info_span!("collector.collect", sub_collector = %sub.name(), otel.kind = "internal");
+                // The safe `collect` settles each sub independently, so a skipped child
+                // cannot clear a sibling that just published.
                 tasks.push(sub.collect(pool).instrument(span));
             }
 
@@ -77,8 +83,15 @@ impl Collector for DefaultCollector {
                 res?;
             }
 
-            Ok(())
+            Ok(Collected::Fresh)
         })
+    }
+
+    /// Fans out to the sub-collectors; this umbrella owns no metrics itself.
+    fn reset_metrics(&self) {
+        for sub in &self.subs {
+            sub.reset_metrics();
+        }
     }
 
     fn enabled_by_default(&self) -> bool {

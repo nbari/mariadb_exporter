@@ -165,7 +165,9 @@ async fn test_global_status_collector_com_metrics() -> Result<()> {
 #[tokio::test]
 async fn test_replication_lag_is_unknown_on_non_replica() -> Result<()> {
     let pool = common::create_test_pool().await?;
-    let collector = StatusCollector::new();
+    // The replication summary is its own leaf of `default` so that an unreadable replica
+    // source settles without erasing the global status gauges.
+    let collector = mariadb_exporter::collectors::default::replication::ReplicationCollector::new();
     let registry = Registry::new();
 
     collector.register_metrics(&registry)?;

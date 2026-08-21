@@ -1,10 +1,15 @@
+use crate::collectors::util::{
+    DeniedOnce, ER_PARSE_ERROR, QueryFailure, classify_query_error, is_mariadb_version_at_least,
+    mysql_error_number,
+};
+use crate::collectors::{Collected, Collector, NO_LABELS};
 use anyhow::{Result, anyhow};
-use prometheus::{IntGauge, IntGaugeVec, Opts};
+use futures::future::BoxFuture;
+use prometheus::{IntGaugeVec, Opts, Registry};
 use sqlx::mysql::MySqlRow;
 use sqlx::{MySqlPool, Row};
 use tracing::{debug, info_span, instrument};
 use tracing_futures::Instrument as _;
-use crate::collectors::util::is_mariadb_version_at_least;
 
 // Keep query semantics aligned with upstream mysqld_exporter:
 // try old/new forms and lock-free suffixes where supported.
@@ -23,15 +28,15 @@ const REPLICA_STATUS_QUERY_CANDIDATES: &[&str] = &[
 /// Collector for SHOW SLAVE STATUS metrics.
 #[derive(Clone)]
 pub struct ReplicaStatusCollector {
-    relay_log_space: IntGauge,
-    relay_log_pos: IntGauge,
-    seconds_behind_master: IntGauge,
-    io_running: IntGauge,
-    sql_running: IntGauge,
-    last_io_errno: IntGauge,
-    last_sql_errno: IntGauge,
-    master_server_id: IntGauge,
-    replica_configured: IntGauge,
+    relay_log_space: IntGaugeVec,
+    relay_log_pos: IntGaugeVec,
+    seconds_behind_master: IntGaugeVec,
+    io_running: IntGaugeVec,
+    sql_running: IntGaugeVec,
+    last_io_errno: IntGaugeVec,
+    last_sql_errno: IntGaugeVec,
+    master_server_id: IntGaugeVec,
+    replica_configured: IntGaugeVec,
     relay_log_space_by_channel: IntGaugeVec,
     relay_log_pos_by_channel: IntGaugeVec,
     seconds_behind_master_by_channel: IntGaugeVec,
@@ -40,6 +45,7 @@ pub struct ReplicaStatusCollector {
     last_io_errno_by_channel: IntGaugeVec,
     last_sql_errno_by_channel: IntGaugeVec,
     master_server_id_by_channel: IntGaugeVec,
+    denied: DeniedOnce,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -144,60 +150,61 @@ impl ReplicaStatusCollector {
                 "Source server id by replication channel",
                 channel_labels,
             ),
+            denied: DeniedOnce::default(),
         }
     }
 
     /// Get relay log space metric.
     #[must_use]
-    pub const fn relay_log_space(&self) -> &IntGauge {
+    pub const fn relay_log_space(&self) -> &IntGaugeVec {
         &self.relay_log_space
     }
 
     /// Get relay log position metric.
     #[must_use]
-    pub const fn relay_log_pos(&self) -> &IntGauge {
+    pub const fn relay_log_pos(&self) -> &IntGaugeVec {
         &self.relay_log_pos
     }
 
     /// Get seconds behind master metric.
     #[must_use]
-    pub const fn seconds_behind_master(&self) -> &IntGauge {
+    pub const fn seconds_behind_master(&self) -> &IntGaugeVec {
         &self.seconds_behind_master
     }
 
     /// Get I/O running metric.
     #[must_use]
-    pub const fn io_running(&self) -> &IntGauge {
+    pub const fn io_running(&self) -> &IntGaugeVec {
         &self.io_running
     }
 
     /// Get SQL running metric.
     #[must_use]
-    pub const fn sql_running(&self) -> &IntGauge {
+    pub const fn sql_running(&self) -> &IntGaugeVec {
         &self.sql_running
     }
 
     /// Get last I/O errno metric.
     #[must_use]
-    pub const fn last_io_errno(&self) -> &IntGauge {
+    pub const fn last_io_errno(&self) -> &IntGaugeVec {
         &self.last_io_errno
     }
 
     /// Get last SQL errno metric.
     #[must_use]
-    pub const fn last_sql_errno(&self) -> &IntGauge {
+    pub const fn last_sql_errno(&self) -> &IntGaugeVec {
         &self.last_sql_errno
     }
 
     /// Get master server ID metric.
     #[must_use]
-    pub const fn master_server_id(&self) -> &IntGauge {
+    pub const fn master_server_id(&self) -> &IntGaugeVec {
         &self.master_server_id
     }
 
     /// Get replica configured metric.
     #[must_use]
-    pub const fn replica_configured(&self) -> &IntGauge {
+    pub const fn replica_configured(&self) -> &IntGaugeVec {
         &self.replica_configured
     }
 
@@ -249,15 +256,22 @@ impl ReplicaStatusCollector {
         &self.master_server_id_by_channel
     }
 
-    fn clear_replica_metrics(&self) {
-        self.relay_log_space.set(0);
-        self.relay_log_pos.set(0);
-        self.seconds_behind_master.set(-1);
-        self.io_running.set(0);
-        self.sql_running.set(0);
-        self.last_io_errno.set(0);
-        self.last_sql_errno.set(0);
-        self.master_server_id.set(0);
+    /// Publish the documented "configured but not replicating / unknown" sentinels.
+    ///
+    /// These values have meaning only for a *successful* read that found no replica: `-1`
+    /// lag means "NULL/stopped/unknown" and the running flags mean "not running". They are
+    /// never published for a source the exporter could not read.
+    fn set_no_replica_sentinels(&self) {
+        self.relay_log_space.with_label_values(&NO_LABELS).set(0);
+        self.relay_log_pos.with_label_values(&NO_LABELS).set(0);
+        self.seconds_behind_master
+            .with_label_values(&NO_LABELS)
+            .set(-1);
+        self.io_running.with_label_values(&NO_LABELS).set(0);
+        self.sql_running.with_label_values(&NO_LABELS).set(0);
+        self.last_io_errno.with_label_values(&NO_LABELS).set(0);
+        self.last_sql_errno.with_label_values(&NO_LABELS).set(0);
+        self.master_server_id.with_label_values(&NO_LABELS).set(0);
         self.reset_channel_metrics();
     }
 
@@ -272,108 +286,202 @@ impl ReplicaStatusCollector {
         self.master_server_id_by_channel.reset();
     }
 
+    /// Probe `performance_schema.replication_connection_configuration` for configured
+    /// channels.
+    ///
+    /// An absent or unreadable table leaves the answer unknown (`None`) and the caller falls
+    /// back to `SHOW SLAVE STATUS`; a genuine fault propagates, because a failed feature
+    /// probe is not evidence that the feature is missing.
+    async fn probe_configured(pool: &MySqlPool) -> Result<Option<bool>> {
+        if !is_mariadb_version_at_least(100_600) {
+            return Ok(None);
+        }
+
+        let config_span = info_span!(
+            "db.query",
+            db.system = "mysql",
+            db.operation = "SELECT",
+            db.statement = "SELECT COUNT(*) FROM performance_schema.replication_connection_configuration",
+            otel.kind = "client"
+        );
+
+        match sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM performance_schema.replication_connection_configuration",
+        )
+        .fetch_one(pool)
+        .instrument(config_span)
+        .await
+        {
+            Ok(count) => Ok(Some(count > 0)),
+            Err(e) => match classify_query_error(&e) {
+                QueryFailure::Absent | QueryFailure::Denied => {
+                    debug!(error = %e, "replication_connection_configuration not available; falling back to SHOW SLAVE STATUS");
+                    Ok(None)
+                }
+                QueryFailure::Fault => Err(e.into()),
+            },
+        }
+    }
+
     /// Collect replica status metrics from SHOW SLAVE STATUS.
     ///
     /// # Errors
     ///
-    /// Returns an error if the database query fails (though queries are best-effort).
-    #[instrument(skip(self, pool), level = "debug", fields(sub_collector = "replica_status"))]
-    pub async fn collect(&self, pool: &MySqlPool) -> Result<()> {
-        let mut configured = None;
+    /// Returns an error if the replica status could not be read for a reason other than the
+    /// source being absent or unreadable.
+    #[instrument(skip(self, pool), level = "debug", err, fields(sub_collector = "replica_status"))]
+    async fn collect_inner(&self, pool: &MySqlPool) -> Result<Collected> {
+        let configured = Self::probe_configured(pool).await?;
 
-        if is_mariadb_version_at_least(100_600) {
-            let config_span = info_span!(
-                "db.query",
-                db.system = "mysql",
-                db.operation = "SELECT",
-                db.statement = "SELECT COUNT(*) FROM performance_schema.replication_connection_configuration",
-                otel.kind = "client"
-            );
-
-            match sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM performance_schema.replication_connection_configuration",
-            )
-            .fetch_one(pool)
-            .instrument(config_span)
-            .await
-            {
-                Ok(count) => configured = Some(count > 0),
-                Err(e) => debug!(error = %e, "replication_connection_configuration not available; falling back to SHOW SLAVE STATUS"),
-            }
-        }
-
-        let rows = match query_replica_status_rows(pool).await {
-            Ok(rows) => rows,
-            Err(e) => {
-                debug!(error = %e, "replica status query failed; marking replica metrics unknown");
-                self.clear_replica_metrics();
-                self.replica_configured
-                    .set(i64::from(configured.unwrap_or(false)));
-                return Ok(());
+        let rows = match query_replica_status_rows(pool).await? {
+            ReplicaStatusOutcome::Rows(rows) => rows,
+            ReplicaStatusOutcome::Unavailable { denied } => {
+                if let Some(e) = denied {
+                    self.denied.report("SHOW REPLICA STATUS", &e);
+                } else {
+                    debug!("no supported replica status statement; skipping replica metrics");
+                }
+                // Never translate an unreadable source into "0 lag, threads stopped".
+                return Ok(Collected::Skipped);
             }
         };
 
-        configured = Some(configured.unwrap_or(false) || !rows.is_empty());
-
         if rows.is_empty() {
-            self.clear_replica_metrics();
-        } else {
-            self.reset_channel_metrics();
-
-            let channels: Vec<_> = rows.iter().map(parse_channel_status).collect();
-            for channel in &channels {
-                let labels = [
-                    channel.channel_name.as_str(),
-                    channel.connection_name.as_str(),
-                ];
-                self.relay_log_space_by_channel
-                    .with_label_values(&labels)
-                    .set(channel.relay_log_space);
-                self.relay_log_pos_by_channel
-                    .with_label_values(&labels)
-                    .set(channel.relay_log_pos);
-                self.seconds_behind_master_by_channel
-                    .with_label_values(&labels)
-                    .set(channel.seconds_behind_master.unwrap_or(-1));
-                self.io_running_by_channel
-                    .with_label_values(&labels)
-                    .set(channel.io_running);
-                self.sql_running_by_channel
-                    .with_label_values(&labels)
-                    .set(channel.sql_running);
-                self.last_io_errno_by_channel
-                    .with_label_values(&labels)
-                    .set(channel.last_io_errno);
-                self.last_sql_errno_by_channel
-                    .with_label_values(&labels)
-                    .set(channel.last_sql_errno);
-                self.master_server_id_by_channel
-                    .with_label_values(&labels)
-                    .set(channel.master_server_id);
-            }
-
-            let aggregate = aggregate_channel_statuses(&channels);
-            self.relay_log_space.set(aggregate.relay_log_space);
-            self.relay_log_pos.set(aggregate.relay_log_pos);
-            self.seconds_behind_master
-                .set(aggregate.seconds_behind_master);
-            self.io_running.set(aggregate.io_running);
-            self.sql_running.set(aggregate.sql_running);
-            self.last_io_errno.set(aggregate.last_io_errno);
-            self.last_sql_errno.set(aggregate.last_sql_errno);
-            self.master_server_id.set(aggregate.master_server_id);
+            // A successful "not a replica" answer is fresh state: publish the documented
+            // sentinels and clear channel labels that no longer exist.
+            self.set_no_replica_sentinels();
+            self.replica_configured
+                .with_label_values(&NO_LABELS)
+                .set(i64::from(configured.unwrap_or(false)));
+            return Ok(Collected::Fresh);
         }
 
-        self.replica_configured
-            .set(i64::from(configured.unwrap_or(false)));
+        // Reset after the successful read, immediately before publishing.
+        self.reset_channel_metrics();
 
-        Ok(())
+        let channels: Vec<_> = rows.iter().map(parse_channel_status).collect();
+        for channel in &channels {
+            let labels = [
+                channel.channel_name.as_str(),
+                channel.connection_name.as_str(),
+            ];
+            self.relay_log_space_by_channel
+                .with_label_values(&labels)
+                .set(channel.relay_log_space);
+            self.relay_log_pos_by_channel
+                .with_label_values(&labels)
+                .set(channel.relay_log_pos);
+            self.seconds_behind_master_by_channel
+                .with_label_values(&labels)
+                .set(channel.seconds_behind_master.unwrap_or(-1));
+            self.io_running_by_channel
+                .with_label_values(&labels)
+                .set(channel.io_running);
+            self.sql_running_by_channel
+                .with_label_values(&labels)
+                .set(channel.sql_running);
+            self.last_io_errno_by_channel
+                .with_label_values(&labels)
+                .set(channel.last_io_errno);
+            self.last_sql_errno_by_channel
+                .with_label_values(&labels)
+                .set(channel.last_sql_errno);
+            self.master_server_id_by_channel
+                .with_label_values(&labels)
+                .set(channel.master_server_id);
+        }
+
+        let aggregate = aggregate_channel_statuses(&channels);
+        self.relay_log_space
+            .with_label_values(&NO_LABELS)
+            .set(aggregate.relay_log_space);
+        self.relay_log_pos
+            .with_label_values(&NO_LABELS)
+            .set(aggregate.relay_log_pos);
+        self.seconds_behind_master
+            .with_label_values(&NO_LABELS)
+            .set(aggregate.seconds_behind_master);
+        self.io_running
+            .with_label_values(&NO_LABELS)
+            .set(aggregate.io_running);
+        self.sql_running
+            .with_label_values(&NO_LABELS)
+            .set(aggregate.sql_running);
+        self.last_io_errno
+            .with_label_values(&NO_LABELS)
+            .set(aggregate.last_io_errno);
+        self.last_sql_errno
+            .with_label_values(&NO_LABELS)
+            .set(aggregate.last_sql_errno);
+        self.master_server_id
+            .with_label_values(&NO_LABELS)
+            .set(aggregate.master_server_id);
+
+        self.replica_configured.with_label_values(&NO_LABELS).set(1);
+
+        Ok(Collected::Fresh)
     }
 }
 
+impl Collector for ReplicaStatusCollector {
+    fn name(&self) -> &'static str {
+        "replica_status"
+    }
+
+    fn register_metrics(&self, registry: &Registry) -> Result<()> {
+        registry.register(Box::new(self.relay_log_space.clone()))?;
+        registry.register(Box::new(self.relay_log_pos.clone()))?;
+        registry.register(Box::new(self.seconds_behind_master.clone()))?;
+        registry.register(Box::new(self.io_running.clone()))?;
+        registry.register(Box::new(self.sql_running.clone()))?;
+        registry.register(Box::new(self.last_io_errno.clone()))?;
+        registry.register(Box::new(self.last_sql_errno.clone()))?;
+        registry.register(Box::new(self.master_server_id.clone()))?;
+        registry.register(Box::new(self.replica_configured.clone()))?;
+        registry.register(Box::new(self.relay_log_space_by_channel.clone()))?;
+        registry.register(Box::new(self.relay_log_pos_by_channel.clone()))?;
+        registry.register(Box::new(self.seconds_behind_master_by_channel.clone()))?;
+        registry.register(Box::new(self.io_running_by_channel.clone()))?;
+        registry.register(Box::new(self.sql_running_by_channel.clone()))?;
+        registry.register(Box::new(self.last_io_errno_by_channel.clone()))?;
+        registry.register(Box::new(self.last_sql_errno_by_channel.clone()))?;
+        registry.register(Box::new(self.master_server_id_by_channel.clone()))?;
+        Ok(())
+    }
+
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
+        Box::pin(async move { self.collect_inner(pool).await })
+    }
+
+    fn reset_metrics(&self) {
+        self.relay_log_space.reset();
+        self.relay_log_pos.reset();
+        self.seconds_behind_master.reset();
+        self.io_running.reset();
+        self.sql_running.reset();
+        self.last_io_errno.reset();
+        self.last_sql_errno.reset();
+        self.master_server_id.reset();
+        self.replica_configured.reset();
+        self.reset_channel_metrics();
+    }
+
+    fn enabled_by_default(&self) -> bool {
+        false
+    }
+}
+
+/// Result of probing the supported `SHOW ... STATUS` statement forms.
+enum ReplicaStatusOutcome {
+    /// A statement form succeeded. An empty vector is a valid "not a replica" answer.
+    Rows(Vec<MySqlRow>),
+    /// No form could be read: either the server supports none of them or access was denied.
+    Unavailable { denied: Option<sqlx::Error> },
+}
+
 #[allow(clippy::expect_used)]
-fn gauge(name: &str, help: &str) -> IntGauge {
-    IntGauge::new(name, help).expect("valid replication metric")
+fn gauge(name: &str, help: &str) -> IntGaugeVec {
+    IntGaugeVec::new(Opts::new(name, help), &NO_LABELS).expect("valid replication metric")
 }
 
 #[allow(clippy::expect_used)]
@@ -381,9 +489,10 @@ fn gauge_by_channel(name: &str, help: &str, labels: &[&str]) -> IntGaugeVec {
     IntGaugeVec::new(Opts::new(name, help), labels).expect("valid channel replication metric")
 }
 
-async fn query_replica_status_rows(pool: &MySqlPool) -> Result<Vec<MySqlRow>> {
-    let mut last_error = None;
+async fn query_replica_status_rows(pool: &MySqlPool) -> Result<ReplicaStatusOutcome> {
     let mut had_empty_success = false;
+    let mut denied: Option<sqlx::Error> = None;
+    let mut fault: Option<sqlx::Error> = None;
 
     for query in REPLICA_STATUS_QUERY_CANDIDATES {
         let span = info_span!(
@@ -400,24 +509,39 @@ async fn query_replica_status_rows(pool: &MySqlPool) -> Result<Vec<MySqlRow>> {
                     had_empty_success = true;
                     continue;
                 }
-                return Ok(rows);
+                return Ok(ReplicaStatusOutcome::Rows(rows));
             }
             Err(e) => {
-                debug!(query, error = %e, "replica status query form not supported");
-                last_error = Some(e);
+                // This loop is a capability probe over statement *forms*: a parse error only
+                // means "this server does not know this spelling", so it is treated as an
+                // absent form rather than as a fault in our own SQL.
+                if mysql_error_number(&e) == Some(ER_PARSE_ERROR) {
+                    debug!(query, error = %e, "replica status query form not supported");
+                    continue;
+                }
+                match classify_query_error(&e) {
+                    QueryFailure::Absent => {
+                        debug!(query, error = %e, "replica status source not available");
+                    }
+                    QueryFailure::Denied => {
+                        debug!(query, error = %e, "replica status not permitted");
+                        denied = Some(e);
+                    }
+                    QueryFailure::Fault => fault = Some(e),
+                }
             }
         }
     }
 
     if had_empty_success {
-        return Ok(Vec::new());
+        return Ok(ReplicaStatusOutcome::Rows(Vec::new()));
     }
 
-    Err(anyhow!(
-        "all replica status query forms failed: {}",
-        last_error
-            .map_or_else(|| "unknown error".to_string(), |e| e.to_string())
-    ))
+    if let Some(e) = fault {
+        return Err(anyhow!("all replica status query forms failed: {e}"));
+    }
+
+    Ok(ReplicaStatusOutcome::Unavailable { denied })
 }
 
 fn parse_channel_status(row: &MySqlRow) -> ReplicaChannelStatus {

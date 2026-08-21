@@ -1,0 +1,61 @@
+---
+name: Security Audit
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    # Run daily at 00:00 UTC so newly published advisories are caught even
+    # when the dependency tree has not changed.
+    - cron: '0 0 * * *'
+  pull_request:
+    paths:
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - '.github/workflows/security-audit.yml'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - '.github/workflows/security-audit.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  security_audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache Rust toolchain
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-audit-${{ hashFiles('rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-audit-
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: if [[ ! -e ~/.cargo/bin/cargo-audit ]]; then cargo install cargo-audit --locked; fi
+
+      - name: Run cargo audit
+        run: cargo audit --deny unsound --deny yanked

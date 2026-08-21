@@ -192,9 +192,17 @@ impl crate::collectors::Collector for ScraperCollector {
         self.register(registry)
     }
 
-    fn collect<'a>(&'a self, _pool: &'a sqlx::MySqlPool) -> futures::future::BoxFuture<'a, Result<()>> {
-        Box::pin(async move { Ok(()) })
+    fn collect_once<'a>(
+        &'a self,
+        _pool: &'a sqlx::MySqlPool,
+    ) -> futures::future::BoxFuture<'a, Result<crate::collectors::Collected>> {
+        Box::pin(async move { Ok(crate::collectors::Collected::Fresh) })
     }
+
+    /// Deliberately a no-op: the scraper observes the exporter itself, so it has no source
+    /// that can become unavailable and no skip path. Clearing it would also destroy the
+    /// per-collector error counters that make a skip or failure alertable.
+    fn reset_metrics(&self) {}
 
     fn enabled_by_default(&self) -> bool {
         false

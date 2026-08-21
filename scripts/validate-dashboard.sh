@@ -61,6 +61,7 @@ EXPORTER_LOG="/tmp/validate_dashboard_exporter.log"
     --collector.metadata \
     --collector.userstat \
     --collector.innodb \
+    --collector.system \
     >"$EXPORTER_LOG" 2>&1 &
 EXPORTER_PID=$!
 
@@ -112,10 +113,34 @@ echo ""
 # Step 5: Validate dashboard metrics against actual
 echo "✓  Step 5: Validating dashboard metrics..."
 
-# Define optional metrics that may not be present (plugin/config dependent)
+# Define optional metrics that may not be present.
+#
+# A collector that cannot read its source publishes *nothing* for it rather than a stale or
+# fabricated `0` (see "Scrape outcomes" in README.md), so a dashboard panel can legitimately
+# have no series on a server where that source is unavailable. These names must still exist
+# in the code — the dashboard tests in `tests/dashboard_comprehensive.rs` check that — but
+# their presence in a live scrape depends on the server.
 cat > /tmp/validate_dashboard_optional.txt << 'EOF'
 mariadb_metadata_lock_info_count
+mariadb_perf_schema_table_lock_waits
+mariadb_info_schema_query_response_time_seconds_bucket
+mariadb_info_schema_query_response_time_seconds_count
+mariadb_info_schema_query_response_time_seconds_sum
+mariadb_primary_binlog_files
+mariadb_innodb_adaptive_hash_searches_total
+mariadb_innodb_adaptive_hash_searches_btree_total
+mariadb_global_status_connection_errors_refused
+mariadb_global_status_connection_errors_too_many_connections
+mariadb_innodb_log_written
+mariadb_innodb_os_log_fsyncs
+mariadb_innodb_os_log_pending_fsyncs
+mariadb_innodb_os_log_pending_writes
+mariadb_innodb_rows_deleted
+mariadb_innodb_rows_inserted
+mariadb_innodb_rows_read
+mariadb_innodb_rows_updated
 EOF
+sort -o /tmp/validate_dashboard_optional.txt /tmp/validate_dashboard_optional.txt
 
 comm -13 /tmp/validate_dashboard_actual.txt /tmp/validate_dashboard_referenced.txt > /tmp/validate_dashboard_invalid.txt
 

@@ -3,7 +3,7 @@
 #![allow(clippy::panic)]
 
 use anyhow::Context;
-use mariadb_exporter::collectors::default::status::StatusCollector;
+use mariadb_exporter::collectors::default::replication::ReplicationCollector as DefaultReplicationCollector;
 use mariadb_exporter::collectors::replication::ReplicationCollector;
 use mariadb_exporter::collectors::util::set_base_connect_options_from_dsn;
 use mariadb_exporter::collectors::{
@@ -92,12 +92,9 @@ fn detect_podman_socket() -> Option<String> {
 }
 
 fn should_require_container_runtime() -> bool {
-    let in_ci = env::var("CI")
-        .ok()
-        .is_some_and(|value| value.eq_ignore_ascii_case("true"));
+    let in_ci = env::var("CI").is_ok_and(|value| value.eq_ignore_ascii_case("true"));
     let force = env::var("MARIADB_EXPORTER_REQUIRE_TESTCONTAINERS")
-        .ok()
-        .is_some_and(|value| matches!(value.as_str(), "1" | "true" | "TRUE"));
+        .is_ok_and(|value| matches!(value.as_str(), "1" | "true" | "TRUE"));
 
     in_ci || force
 }
@@ -322,7 +319,7 @@ async fn wait_for_replicated_marker(
     master_pool: &MySqlPool,
     replica_pool: &MySqlPool,
 ) -> anyhow::Result<()> {
-    let marker = Ulid::new().to_string();
+    let marker = Ulid::generate().to_string();
 
     sqlx::query("CREATE DATABASE IF NOT EXISTS exporter_test")
         .execute(master_pool)
@@ -441,8 +438,12 @@ async fn gather_replication_collector_metrics(
     Ok(registry.gather())
 }
 
+/// Gathers the `mariadb_slave_status_*` summary published by the `default` collector.
+///
+/// These live in their own leaf (`default::replication`) so that an unreadable replica
+/// source settles on its own instead of erasing the global status gauges.
 async fn gather_default_status_metrics(pool: &MySqlPool) -> anyhow::Result<Vec<MetricFamily>> {
-    let collector = StatusCollector::new();
+    let collector = DefaultReplicationCollector::new();
     let registry = Registry::new();
     collector.register_metrics(&registry)?;
     collector.collect(pool).await?;
@@ -725,7 +726,7 @@ async fn generate_replication_backlog(master_pool: &MySqlPool) -> anyhow::Result
     .await?;
 
     for _ in 0..32 {
-        let marker = Ulid::new().to_string();
+        let marker = Ulid::generate().to_string();
         sqlx::query("INSERT INTO exporter_test.replication_backlog (marker) VALUES (?)")
             .bind(marker)
             .execute(master_pool)
@@ -788,6 +789,63 @@ async fn verify_replica_role_and_lag_semantics(
     wait_for_replica_threads_state(replica_pool, "No").await?;
     assert_stopped_replica_collectors(replica_pool).await?;
 
+    assert_channel_labels_disappear_when_replication_is_reset(replica_pool).await?;
+
+    Ok(())
+}
+
+/// Replica/channel present -> no replica.
+///
+/// `RESET SLAVE ALL` leaves a perfectly readable server that simply has no replication
+/// channel any more. That is a *fresh* empty snapshot, so the per-channel series published
+/// by the previous scrape have to disappear with it: a channel that no longer exists must
+/// not keep reporting its last thread states.
+async fn assert_channel_labels_disappear_when_replication_is_reset(
+    replica_pool: &MySqlPool,
+) -> anyhow::Result<()> {
+    // One collector across both scrapes, so the transition is actually observable.
+    let collector = ReplicationCollector::new();
+    let registry = Registry::new();
+    collector.register_metrics(&registry)?;
+
+    collector.collect(replica_pool).await?;
+    let channel_samples = |metric: &str| -> usize {
+        registry
+            .gather()
+            .iter()
+            .filter(|mf| mf.name() == metric)
+            .map(|mf| mf.get_metric().len())
+            .sum()
+    };
+
+    assert!(
+        channel_samples("mariadb_replica_io_running_by_channel") > 0,
+        "a configured replica should publish per-channel series"
+    );
+
+    sqlx::query("RESET SLAVE ALL").execute(replica_pool).await?;
+
+    collector.collect(replica_pool).await?;
+
+    assert_eq!(
+        channel_samples("mariadb_replica_io_running_by_channel"),
+        0,
+        "a channel that no longer exists must not keep reporting its last thread state"
+    );
+    assert_eq!(
+        channel_samples("mariadb_replica_seconds_behind_master_seconds_by_channel"),
+        0,
+        "a channel that no longer exists must not keep reporting its last lag"
+    );
+
+    // The server is still readable, so the non-channel summary stays fresh and honest.
+    assert_gauge_eq(
+        &registry.gather(),
+        "mariadb_replica_configured",
+        0.0,
+        "a server with no replication configured is a factual 0, not an absence",
+    )?;
+
     Ok(())
 }
 
@@ -798,7 +856,7 @@ async fn replication_lag_from_mariadb_11_8_primary_replica_pair() -> anyhow::Res
         return Ok(());
     }
 
-    let suffix = Ulid::new().to_string().to_lowercase();
+    let suffix = Ulid::generate().to_string().to_lowercase();
     let network = format!("mariadb-repl-{suffix}");
     let master_name = format!("mariadb-master-{suffix}");
     let replica_name = format!("mariadb-replica-{suffix}");

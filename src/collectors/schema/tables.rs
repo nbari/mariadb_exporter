@@ -1,7 +1,12 @@
+use crate::collectors::{
+    Collected, Collector,
+    util::{DeniedOnce, QueryFailure, classify_query_error},
+};
 use anyhow::Result;
-use prometheus::{IntGaugeVec, Opts};
+use futures::future::BoxFuture;
+use prometheus::{IntGaugeVec, Opts, Registry};
 use sqlx::MySqlPool;
-use tracing::{info_span, instrument};
+use tracing::{debug, info_span, instrument};
 use tracing_futures::Instrument as _;
 
 /// Table metrics collector for schema information.
@@ -9,6 +14,7 @@ use tracing_futures::Instrument as _;
 pub struct TablesCollector {
     table_size_bytes: IntGaugeVec,
     table_rows: IntGaugeVec,
+    denied: DeniedOnce,
 }
 
 impl TablesCollector {
@@ -41,6 +47,7 @@ impl TablesCollector {
         Self {
             table_size_bytes,
             table_rows,
+            denied: DeniedOnce::default(),
         }
     }
 
@@ -48,13 +55,10 @@ impl TablesCollector {
     ///
     /// # Errors
     ///
-    /// Returns an error if the database query fails.
+    /// Returns an error if the database query fails for a reason other than the source
+    /// being absent or unreadable.
     #[instrument(skip(self, pool), level = "debug", fields(sub_collector = "tables"))]
-    pub async fn collect(&self, pool: &MySqlPool) -> Result<()> {
-        // Reset metrics to avoid stale data from previous scrapes
-        self.table_size_bytes.reset();
-        self.table_rows.reset();
-
+    async fn collect_inner(&self, pool: &MySqlPool) -> Result<Collected> {
         // Build exclusion list from constant
         let excluded = crate::collectors::util::SYSTEM_SCHEMAS
             .iter()
@@ -81,15 +85,35 @@ impl TablesCollector {
              LIMIT 20"
         );
 
-        let rows = sqlx::query_as::<_, (String, String, u64, u64)>(sqlx::AssertSqlSafe(query))
+        let rows = match sqlx::query_as::<_, (String, String, u64, u64)>(sqlx::AssertSqlSafe(query))
             .fetch_all(pool)
             .instrument(span)
-            .await?;
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => match classify_query_error(&e) {
+                QueryFailure::Absent => {
+                    debug!(error = %e, "information_schema.tables unavailable; skipping");
+                    return Ok(Collected::Skipped);
+                }
+                QueryFailure::Denied => {
+                    self.denied.report("information_schema.tables", &e);
+                    return Ok(Collected::Skipped);
+                }
+                QueryFailure::Fault => return Err(e.into()),
+            },
+        };
 
-        tracing::debug!("Schema collector found {} tables", rows.len());
+        debug!("Schema collector found {} tables", rows.len());
+
+        // Reset only after the query succeeded and immediately before publishing: a query
+        // error must never destroy the last good snapshot, while a successful empty result
+        // is a fresh empty snapshot that legitimately clears vanished tables.
+        self.table_size_bytes.reset();
+        self.table_rows.reset();
 
         for (schema, table, size_bytes, rows_est) in rows {
-            tracing::debug!("Setting metrics for {}.{}: size={}, rows={}", schema, table, size_bytes, rows_est);
+            debug!("Setting metrics for {}.{}: size={}, rows={}", schema, table, size_bytes, rows_est);
             #[allow(clippy::cast_possible_wrap)]
             let size_i64 = size_bytes as i64;
             #[allow(clippy::cast_possible_wrap)]
@@ -103,19 +127,44 @@ impl TablesCollector {
                 .set(rows_i64);
         }
 
-        Ok(())
+        Ok(Collected::Fresh)
     }
 
     /// Get the table size metric for registration.
     #[must_use]
-    pub fn table_size_bytes(&self) -> &IntGaugeVec {
+    pub const fn table_size_bytes(&self) -> &IntGaugeVec {
         &self.table_size_bytes
     }
 
     /// Get the table rows metric for registration.
     #[must_use]
-    pub fn table_rows(&self) -> &IntGaugeVec {
+    pub const fn table_rows(&self) -> &IntGaugeVec {
         &self.table_rows
+    }
+}
+
+impl Collector for TablesCollector {
+    fn name(&self) -> &'static str {
+        "tables"
+    }
+
+    fn register_metrics(&self, registry: &Registry) -> Result<()> {
+        registry.register(Box::new(self.table_size_bytes.clone()))?;
+        registry.register(Box::new(self.table_rows.clone()))?;
+        Ok(())
+    }
+
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
+        Box::pin(async move { self.collect_inner(pool).await })
+    }
+
+    fn reset_metrics(&self) {
+        self.table_size_bytes.reset();
+        self.table_rows.reset();
+    }
+
+    fn enabled_by_default(&self) -> bool {
+        false
     }
 }
 

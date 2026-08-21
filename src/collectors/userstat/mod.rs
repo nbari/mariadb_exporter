@@ -1,4 +1,7 @@
-use crate::collectors::Collector;
+use crate::collectors::{
+    Collected, Collector,
+    util::{DeniedOnce, QueryFailure, classify_query_error},
+};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use prometheus::{IntGaugeVec, Opts, Registry};
@@ -18,6 +21,7 @@ pub struct UserStatCollector {
     rows_deleted_total: IntGaugeVec,
     rows_inserted_total: IntGaugeVec,
     rows_updated_total: IntGaugeVec,
+    denied: DeniedOnce,
 }
 
 impl UserStatCollector {
@@ -67,6 +71,7 @@ impl UserStatCollector {
                 "mariadb_info_schema_userstats_rows_updated_total",
                 "Rows updated per user",
             ),
+            denied: DeniedOnce::default(),
         }
     }
 }
@@ -101,19 +106,9 @@ impl Collector for UserStatCollector {
     }
 
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "userstat", otel.kind = "internal"))]
-    fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
-            // Reset metrics to avoid stale data
-            self.connections_total.reset();
-            self.bytes_received_total.reset();
-            self.bytes_sent_total.reset();
-            self.rows_read_total.reset();
-            self.rows_sent_total.reset();
-            self.rows_deleted_total.reset();
-            self.rows_inserted_total.reset();
-            self.rows_updated_total.reset();
-
-            // Check userstat status.
+            // Check userstat status. A failing probe is a fault, not "userstat disabled".
             let status_span = info_span!(
                 "db.query",
                 db.system = "mysql",
@@ -121,15 +116,28 @@ impl Collector for UserStatCollector {
                 db.statement = "SELECT @@userstat",
                 otel.kind = "client"
             );
-            let enabled: i64 = sqlx::query_scalar("SELECT @@userstat")
+            let enabled: i64 = match sqlx::query_scalar("SELECT @@userstat")
                 .fetch_one(pool)
                 .instrument(status_span)
                 .await
-                .unwrap_or(0);
+            {
+                Ok(v) => v,
+                Err(e) => match classify_query_error(&e) {
+                    QueryFailure::Absent => {
+                        debug!(error = %e, "@@userstat not supported here; skipping");
+                        return Ok(Collected::Skipped);
+                    }
+                    QueryFailure::Denied => {
+                        self.denied.report("@@userstat", &e);
+                        return Ok(Collected::Skipped);
+                    }
+                    QueryFailure::Fault => return Err(e.into()),
+                },
+            };
 
             if enabled == 0 {
                 debug!("userstat is disabled, skipping collection");
-                return Ok(());
+                return Ok(Collected::Skipped);
             }
 
             // Confirm table exists.
@@ -146,13 +154,12 @@ impl Collector for UserStatCollector {
             )
             .fetch_one(pool)
             .instrument(exists_span)
-            .await
-            .unwrap_or(0)
+            .await?
                 > 0;
 
             if !has_table {
                 debug!("USER_STATISTICS not available even though userstat=1; skipping metrics");
-                return Ok(());
+                return Ok(Collected::Skipped);
             }
 
             let span = info_span!(
@@ -163,7 +170,7 @@ impl Collector for UserStatCollector {
                 otel.kind = "client"
             );
 
-            let rows = sqlx::query_as::<_, (String, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64)>(
+            let rows = match sqlx::query_as::<_, (String, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64)>(
                 "SELECT USER, 
                         CAST(TOTAL_CONNECTIONS AS SIGNED), 
                         CAST(BYTES_RECEIVED AS SIGNED), 
@@ -178,7 +185,26 @@ impl Collector for UserStatCollector {
             )
             .fetch_all(pool)
             .instrument(span)
-            .await?;
+            .await
+            {
+                Ok(r) => r,
+                Err(e) => match classify_query_error(&e) {
+                    QueryFailure::Absent => {
+                        debug!(error = %e, "USER_STATISTICS unavailable; skipping");
+                        return Ok(Collected::Skipped);
+                    }
+                    QueryFailure::Denied => {
+                        self.denied.report("information_schema.USER_STATISTICS", &e);
+                        return Ok(Collected::Skipped);
+                    }
+                    QueryFailure::Fault => return Err(e.into()),
+                },
+            };
+
+            // Reset after the successful read, immediately before publishing: users that
+            // vanished from a valid snapshot disappear, but a query error can never wipe the
+            // previous one.
+            Collector::reset_metrics(self);
 
             for (user, total_conn, bytes_recv, bytes_sent, rows_read, rows_sent, rows_del, rows_ins, rows_upd, _, _, _) in rows {
                 let u = user.as_str();
@@ -192,8 +218,20 @@ impl Collector for UserStatCollector {
                 self.rows_updated_total.with_label_values(&[u]).set(rows_upd);
             }
 
-            Ok(())
+            Ok(Collected::Fresh)
         })
+    }
+
+    /// Disabled or unreadable user statistics clear every per-user series.
+    fn reset_metrics(&self) {
+        self.connections_total.reset();
+        self.bytes_received_total.reset();
+        self.bytes_sent_total.reset();
+        self.rows_read_total.reset();
+        self.rows_sent_total.reset();
+        self.rows_deleted_total.reset();
+        self.rows_inserted_total.reset();
+        self.rows_updated_total.reset();
     }
 
     fn enabled_by_default(&self) -> bool {

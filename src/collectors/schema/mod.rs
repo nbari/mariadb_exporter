@@ -1,4 +1,4 @@
-use crate::collectors::Collector;
+use crate::collectors::{Collected, Collector};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use prometheus::Registry;
@@ -22,6 +22,12 @@ impl SchemaCollector {
             tables: TablesCollector::new(),
         }
     }
+
+    /// Access the tables sub-collector.
+    #[must_use]
+    pub const fn tables(&self) -> &TablesCollector {
+        &self.tables
+    }
 }
 
 impl Default for SchemaCollector {
@@ -42,17 +48,21 @@ impl Collector for SchemaCollector {
         fields(collector = "schema")
     )]
     fn register_metrics(&self, registry: &Registry) -> Result<()> {
-        registry.register(Box::new(self.tables.table_size_bytes().clone()))?;
-        registry.register(Box::new(self.tables.table_rows().clone()))?;
+        self.tables.register_metrics(registry)?;
         Ok(())
     }
 
     #[instrument(skip(self, pool), level = "info", err, fields(collector = "schema", otel.kind = "internal"))]
-    fn collect<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+    fn collect_once<'a>(&'a self, pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
             self.tables.collect(pool).await?;
-            Ok(())
+            Ok(Collected::Fresh)
         })
+    }
+
+    /// Fans out to the sub-collector; this umbrella owns no metrics itself.
+    fn reset_metrics(&self) {
+        Collector::reset_metrics(&self.tables);
     }
 
     fn enabled_by_default(&self) -> bool {

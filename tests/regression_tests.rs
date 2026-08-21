@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::expect_used)]
 use anyhow::Result;
-use mariadb_exporter::collectors::Collector;
 use mariadb_exporter::collectors::innodb::status::StatusParser as InnodbStatusParser;
+use mariadb_exporter::collectors::{Collector, NO_LABELS};
 
 #[test]
 fn regression_innodb_semaphore_summing() {
@@ -17,13 +17,16 @@ RW-shared spins 30, rounds 40, OS waits 15
 
     // Sum of OS waits: 5 + 15 = 20
     assert_eq!(
-        parser.semaphore_waits().get(),
+        parser.semaphore_waits().with_label_values(&NO_LABELS).get(),
         20,
         "Should sum all OS waits"
     );
     // Sum of wait times: 1.0 + 2.5 = 3.5s = 3500ms
     assert_eq!(
-        parser.semaphore_wait_time_ms().get(),
+        parser
+            .semaphore_wait_time_ms()
+            .with_label_values(&NO_LABELS)
+            .get(),
         3500,
         "Should sum all wait times"
     );
