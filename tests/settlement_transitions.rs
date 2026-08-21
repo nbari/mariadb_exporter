@@ -56,6 +56,47 @@ fn container_runtime_required() -> bool {
             .is_ok_and(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
 }
 
+/// Number of times a container start is attempted before it is treated as a real failure.
+const START_ATTEMPTS: u32 = 3;
+
+/// Starts the pinned `MariaDB` image, retrying transient failures.
+///
+/// Pulling the image reaches out to a registry, and that hop fails intermittently in CI
+/// (`bytes remaining on stream`). Such a fault says nothing about the code under test, so
+/// retry it a bounded number of times instead of failing the build. A container that still
+/// refuses to start after every attempt is reported to the caller unchanged, which keeps
+/// `container_runtime_required()` strict: a genuinely broken runtime is still an error and
+/// is never silently skipped in CI.
+async fn start_with_retry(test_name: &str) -> anyhow::Result<ContainerAsync<Mariadb>> {
+    let mut last_error = None;
+
+    for attempt in 1..=START_ATTEMPTS {
+        match Mariadb::default()
+            .with_tag(MARIADB_LTS_TAG)
+            .with_env_var("MARIADB_ROOT_PASSWORD", "root")
+            .with_env_var("MARIADB_ROOT_HOST", "%")
+            .start()
+            .await
+        {
+            Ok(container) => return Ok(container),
+            Err(e) => {
+                if attempt < START_ATTEMPTS {
+                    eprintln!(
+                        "starting MariaDB for {test_name} failed (attempt {attempt}/{START_ATTEMPTS}): {e}; retrying"
+                    );
+                    tokio::time::sleep(Duration::from_secs(u64::from(attempt) * 5)).await;
+                }
+                last_error = Some(e);
+            }
+        }
+    }
+
+    Err(last_error.map_or_else(
+        || anyhow::anyhow!("container start reported neither success nor failure"),
+        anyhow::Error::from,
+    ))
+}
+
 /// Starts a dedicated `MariaDB` container and returns it with a pool bound to it.
 ///
 /// Returns `Ok(None)` when the environment has no usable container runtime, so the caller
@@ -73,13 +114,7 @@ async fn isolated_server(
         return Ok(None);
     }
 
-    let container = match Mariadb::default()
-        .with_tag(MARIADB_LTS_TAG)
-        .with_env_var("MARIADB_ROOT_PASSWORD", "root")
-        .with_env_var("MARIADB_ROOT_HOST", "%")
-        .start()
-        .await
-    {
+    let container = match start_with_retry(test_name).await {
         Ok(container) => container,
         Err(e) => {
             if container_runtime_required() {
