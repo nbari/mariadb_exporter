@@ -52,7 +52,7 @@ pub async fn new(
     port: u16,
     listen: Option<String>,
     dsn: SecretString,
-    collectors: Vec<String>,
+    config: CollectorConfig,
 ) -> Result<()> {
     let pool = connect_pool(&dsn)?;
 
@@ -65,7 +65,8 @@ pub async fn new(
 
     let _ = set_base_connect_options_from_dsn(&dsn);
 
-    let config = CollectorConfig::new().with_enabled(&collectors);
+    let mut collectors: Vec<String> = config.enabled_collectors.iter().cloned().collect();
+    collectors.sort();
 
     let registry = CollectorRegistry::new(&config);
 
@@ -115,7 +116,12 @@ async fn initialize_version(pool: &sqlx::MySqlPool) -> Result<()> {
     Ok(())
 }
 
-fn build_router(pool: sqlx::MySqlPool, registry: CollectorRegistry) -> Router {
+/// Builds the HTTP router without binding a socket.
+///
+/// The server path calls this with the shared pool and registry; integration tests call it
+/// directly to drive the handlers in-process — e.g. proving `/health` never goes through
+/// the registry's single-flight scrape gate while a scrape holds it.
+pub fn build_router(pool: sqlx::MySqlPool, registry: CollectorRegistry) -> Router {
     let trace_layer = TraceLayer::new_for_http()
         .make_span_with(make_span)
         .on_response(on_response);

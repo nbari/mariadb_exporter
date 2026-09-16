@@ -315,9 +315,15 @@ watch:
 metrics-dev:
   @./scripts/metrics-dev up
 
+# Backward-compatible singular spelling
+metric-dev: metrics-dev
+
 # Stop the on-demand devcontainer observability stack (Prometheus + Grafana)
 metrics-dev-stop:
   @./scripts/metrics-dev down
+
+# Backward-compatible singular spelling
+metric-dev-stop: metrics-dev-stop
 
 # get metrics curl
 curl:

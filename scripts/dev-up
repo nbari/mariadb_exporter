@@ -43,6 +43,49 @@ esac
 export XDG_RUNTIME_DIR
 mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
 
+# DevPod drives containers with the binary named by the docker provider's DOCKER_PATH
+# option, which is commonly set to `podman`. Compose-based devcontainers are the
+# exception: DevPod shells out to an external Docker Compose implementation, and that
+# binary resolves its own daemon from DOCKER_HOST. With DOCKER_HOST unset it falls back
+# to the Docker socket (on macOS, whatever Docker Desktop/OrbStack registered) even
+# though every other DevPod operation is going to podman, so `devpod up` fails with
+# "failed to connect to the docker API at unix://.../docker.sock".
+#
+# Point compose at podman's own socket when podman is what DevPod was told to use. An
+# explicit DOCKER_HOST is always respected, and if podman has no listening socket
+# (machine not started) we leave everything alone so the error stays truthful.
+if [ -z "${DOCKER_HOST:-}" ] && command -v podman >/dev/null 2>&1 &&
+    devpod provider options docker --output json 2>/dev/null | tr -d ' \n' |
+    grep -qE '"DOCKER_PATH":\{[^}]*"value":"[^"]*podman"'; then
+    case "$(uname -s)" in
+    Darwin)
+        # `podman info` reports the socket path *inside* the VM, which does not exist
+        # on the host; the machine's ConnectionInfo carries the host-side path.
+        podman_socket="$(
+            podman machine inspect \
+                --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null |
+                head -1
+        )"
+        ;;
+    *)
+        podman_socket="$(
+            podman info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null |
+                head -1 | sed 's#^unix://##'
+        )"
+        ;;
+    esac
+
+    if [ -S "${podman_socket:-}" ]; then
+        DOCKER_HOST="unix://${podman_socket}"
+        export DOCKER_HOST
+        echo "==> Using podman socket for compose: ${DOCKER_HOST}"
+    else
+        echo "Warning: DevPod is configured for podman but no podman socket was found." >&2
+        echo "         Start it with 'podman machine start' (macOS) or 'systemctl --user" >&2
+        echo "         start podman.socket' (Linux), or set DOCKER_HOST yourself." >&2
+    fi
+fi
+
 # Remind the user to wire up the dedicated DevPod ssh config (idempotent hint only;
 # we don't edit ~/.ssh/config for you).
 if [ "$ssh_config" = "$HOME/.ssh/devpod" ] &&

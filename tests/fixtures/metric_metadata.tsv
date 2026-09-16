@@ -7,7 +7,9 @@ mariadb_binlog_stmt_cache_disk_use	gauge	Number of statements that used binlog s
 mariadb_exporter_build_info	gauge	Build information for mariadb_exporter
 mariadb_exporter_collector_last_scrape_success	gauge	Whether the last scrape was successful (1=success, 0=failure)
 mariadb_exporter_collector_last_scrape_timestamp_seconds	gauge	Unix timestamp of the last scrape attempt per collector
+mariadb_exporter_collector_scrape_aborted_total	counter	Total scrape attempts aborted mid-flight per collector (scrape timeout or client disconnect); the duration sample records time-until-abort
 mariadb_exporter_collector_scrape_duration_seconds	histogram	Time spent scraping each collector in seconds
+mariadb_exporter_collector_scrape_errors_total	counter	Total number of scrape errors per collector
 mariadb_exporter_metrics_total	gauge	Total number of metrics currently exported (for cardinality monitoring)
 mariadb_exporter_process_cpu_cores	gauge	Number of CPU cores available on the system
 mariadb_exporter_process_cpu_percent	gauge	Current CPU usage percentage (matches ps %cpu, can exceed 100%)
@@ -15,6 +17,7 @@ mariadb_exporter_process_open_fds	gauge	Number of open file descriptors
 mariadb_exporter_process_resident_memory_bytes	gauge	Resident memory size in bytes (RSS)
 mariadb_exporter_process_start_time_seconds	gauge	Start time of the process since unix epoch in seconds
 mariadb_exporter_process_virtual_memory_bytes	gauge	Virtual memory size in bytes (VSZ)
+mariadb_exporter_scrape_aborted_total	counter	Total scrapes abandoned before any collector finished, counted once per scrape rather than per collector. Incremented when a scrape exceeds --scrape.timeout-ms, including while the connectivity check is still in flight, which is the window the per-collector counter cannot see. A client that disconnects mid-scrape drops the request future and so runs no code here: those aborts appear only in the per-collector counter, and only for collectors already in flight
 mariadb_exporter_scrapes_total	gauge	Total number of scrapes performed since start
 mariadb_exporter_system_memory_total_bytes	gauge	Total system memory in bytes
 mariadb_global_status_aborted_clients	gauge	Connections aborted because the client died without closing
@@ -80,6 +83,7 @@ mariadb_global_variables_have_openssl	gauge	Server built with OpenSSL (1/0)
 mariadb_global_variables_have_ssl	gauge	Server has SSL available (1/0)
 mariadb_global_variables_max_connections	gauge	Maximum number of simultaneous client connections allowed
 mariadb_global_variables_performance_schema	gauge	Performance schema enabled (1/0)
+mariadb_info_schema_query_response_time_seconds_bucket	counter	Cumulative counters for query response time histogram buckets
 mariadb_info_schema_query_response_time_seconds_count	counter	Total count of queries tracked
 mariadb_info_schema_query_response_time_seconds_sum	counter	Total sum of query response times in seconds
 mariadb_info_schema_table_rows	gauge	Approximate row count per table
@@ -178,7 +182,7 @@ mariadb_system_memory_total_bytes	gauge	Total physical memory on the host in byt
 mariadb_system_memory_used_bytes	gauge	Used physical memory on the host in bytes
 mariadb_system_process_group_count	gauge	Number of host processes matched in the group
 mariadb_system_process_group_cpu_seconds_total	counter	Cumulative CPU time in seconds (user + system) consumed by host processes in the group, since the exporter started tracking; use rate() for cores consumed
-mariadb_system_process_group_memory_bytes	gauge	Resident memory of the host process group in bytes (Linux: PSS, so pages shared with other processes are not double-counted; FreeBSD: summed RSS)
+mariadb_system_process_group_memory_bytes	gauge	Resident memory of the host process group in bytes (summed RSS; MariaDB is thread-per-connection so the buffer pool is counted once, set --system.process-memory=pss for proportional shared-page accounting)
 mariadb_system_swap_free_bytes	gauge	Free swap space on the host in bytes
 mariadb_system_swap_total_bytes	gauge	Total swap space on the host in bytes
 mariadb_system_swap_used_bytes	gauge	Used swap space on the host in bytes

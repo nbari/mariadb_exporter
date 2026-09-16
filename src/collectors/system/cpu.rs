@@ -36,7 +36,7 @@
 //! load of 8 saturates 1 core but is ~25% of 32 cores). Load average
 //! (`mariadb_system_load1/5/15`) comes from `sysinfo`.
 
-use crate::collectors::{Collected, Collector};
+use crate::collectors::{Collected, Collector, blocking};
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use crate::collectors::i64_to_f64;
 use anyhow::Result;
@@ -301,6 +301,9 @@ pub struct CpuCollector {
     /// Ensures the "CPU counters unsupported on this platform" warning is logged
     /// at most once per process instead of on every scrape.
     unsupported_warned: Arc<AtomicBool>,
+    /// Caps the collector at one in-flight blocking sample; see
+    /// [`blocking::offload_coalesced`].
+    sample_slot: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl CpuCollector {
@@ -349,6 +352,7 @@ impl CpuCollector {
             .expect("mariadb_system_load15"),
             raw_cpu_seconds: Arc::new(Mutex::new(HashMap::new())),
             unsupported_warned: Arc::new(AtomicBool::new(false)),
+            sample_slot: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
@@ -534,7 +538,21 @@ impl Collector for CpuCollector {
     #[instrument(skip(self, _pool), level = "debug")]
     fn collect_once<'a>(&'a self, _pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
-            self.collect_stats();
+            // Blocking `/proc` and sysctl reads: never run these on a runtime worker
+            // (`nbari/pg_exporter#35`).
+            let collector = self.clone();
+            // Deliberately not `?`: a collector `Err` makes the registry withhold every
+            // database-dependent family for the scrape, and an optional host-metrics
+            // collector must never be able to blank out the database metrics. A sample
+            // that did not complete warns and preserves the last good values, exactly
+            // like an unreadable `/proc`.
+            if let Err(error) = blocking::offload_coalesced("system.cpu", &self.sample_slot, move || {
+                collector.collect_stats();
+            })
+            .await
+            {
+                warn!("collector.system cpu sample did not complete: {error}");
+            }
             Ok(Collected::Fresh)
         })
     }

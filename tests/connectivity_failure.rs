@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::expect_used)]
 use anyhow::Result;
+use mariadb_exporter::collectors::config::CollectorConfig;
 use secrecy::SecretString;
 
 mod common;
@@ -17,7 +18,7 @@ async fn test_exporter_starts_when_db_is_down() -> Result<()> {
             port,
             None,
             dsn,
-            vec!["default".to_string(), "exporter".to_string()],
+            CollectorConfig::new().with_enabled(&["default".to_string(), "exporter".to_string()]),
         )
         .await
     });

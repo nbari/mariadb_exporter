@@ -94,7 +94,13 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = true
-panic = "abort"
+# Deliberately *not* `panic = "abort"`. The exporter contains a panicking collector with
+# `catch_unwind` so one bad collector degrades to an HTTP 200 exposition carrying
+# `# Error collecting metrics from '<name>'` instead of killing the process that is supposed
+# to be reporting the incident. `catch_unwind` only catches unwinding panics, so aborting
+# would make that containment — and `ScrapeError::TaskFailed` and `blocking::offload`'s
+# panic contract — silently inert in exactly the builds that ship.
+# Locked by `tests/collector_safety.rs::panic_containment_is_not_disabled_in_release`.
 
 [dev-dependencies]
 nix = { version = "0.31.3", features = ["user"] }
@@ -104,3 +110,4 @@ serde_json = "1.0"
 temp-env = "0.3"
 testcontainers-modules = { version = "0.15", features = ["mariadb"] }
 tokio = { version = "1.53.1", features = ["full", "test-util"] }
+toml = "1.1.6"

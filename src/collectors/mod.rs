@@ -173,8 +173,16 @@ register_collectors! {
 }
 
 // Other modules
+pub mod blocking;
 pub mod config;
 pub mod registry;
+
+/// Wall-clock budget for one `/metrics` scrape when `--scrape.timeout-ms` is not set.
+///
+/// Chosen to sit just under the 10s Prometheus default `scrape_timeout` doubled, so a
+/// slow-but-recovering server still gets a chance to answer while a genuinely stuck scrape
+/// is torn down long before it can accumulate generations of abandoned work.
+pub const DEFAULT_SCRAPE_TIMEOUT_MS: u64 = 15_000;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]

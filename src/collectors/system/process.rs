@@ -1,14 +1,18 @@
 //! Host resource usage for the `MariaDB` server process group.
 //!
-//! Aggregates CPU and memory for every OS process whose name starts with
-//! `mariadbd` or `mysqld` into a single low-cardinality series labeled
-//! `group="mariadb"`. This answers a question the host-wide panels cannot: *is
-//! `MariaDB` itself eating the box, or is it a co-located neighbour?*
+//! Aggregates CPU and memory for every OS process whose name is exactly
+//! `mariadbd`, `mysqld`, `mariadbd-safe`, or `mysqld_safe` into a single
+//! low-cardinality series labeled `group="mariadb"`. This answers a question
+//! the host-wide panels cannot: *is `MariaDB` itself eating the box, or is it
+//! a co-located neighbour?*
 //!
-//! Both prefixes are matched because the server binary is `mariadbd` on modern
-//! releases and `mysqld` on older ones (and on installs that keep the
-//! compatibility name). The prefixes also match the `mariadbd-safe` / `mysqld_safe`
-//! wrapper scripts, which are part of the same service and cost almost nothing.
+//! Both server names are matched because the server binary is `mariadbd` on
+//! modern releases and `mysqld` on older ones (and on installs that keep the
+//! compatibility name). The `mariadbd-safe` / `mysqld_safe` wrapper scripts are
+//! members in their own right: they are part of the same service and cost
+//! almost nothing. Membership is exact rather than a prefix match, so lookalike
+//! tools that share the `mysqld` stem — `mysqldump`, or the community
+//! `mysqld_exporter` on hosts that run both — never leak into the series.
 //!
 //! - **CPU** is a cumulative counter,
 //!   `mariadb_system_process_group_cpu_seconds_total` (`utime + stime`). It is
@@ -16,26 +20,25 @@
 //!   second instance stopping) never makes the group counter go backwards; use
 //!   `rate()` to get "cores consumed by `MariaDB`".
 //! - **Memory** is `mariadb_system_process_group_memory_bytes`. On Linux this is
-//!   **PSS** (proportional set size, from `/proc/<pid>/smaps_rollup`), which
-//!   divides shared pages proportionally, so pages shared with other processes
-//!   (shared libraries, and copy-on-write pages when several instances run on
-//!   one host) are not counted more than once. PSS requires the exporter to run
-//!   as the `mysql` user or as root; when a process is not readable it falls
-//!   back to that process's RSS. On FreeBSD there is no cheap PSS, so this is the
-//!   summed **RSS**.
+//!   **RSS**, read from `/proc/<pid>/statm`; on FreeBSD it is the summed RSS
+//!   reported by `sysinfo`. `--system.process-memory=pss` switches Linux to PSS
+//!   (`/proc/<pid>/smaps_rollup`), which is **much** more expensive — see
+//!   [`ProcessMemorySource`].
 //!
-//!   Note that `MariaDB` is **thread-per-connection**, not process-per-connection:
-//!   a single `mariadbd` process serves every session, so the `InnoDB` buffer pool
-//!   is already counted exactly once and PSS and RSS are usually close. This is
-//!   unlike `PostgreSQL`, where PSS is what stops `shared_buffers` being
-//!   multiplied across hundreds of backend processes.
+//!   RSS is the right default here, and not merely the cheap one. `MariaDB` is
+//!   **thread-per-connection**, not process-per-connection: a single `mariadbd`
+//!   process serves every session, so the `InnoDB` buffer pool is already counted
+//!   exactly once and summing RSS over the group cannot multiply it. This is
+//!   unlike `PostgreSQL`, where PSS is what stops `shared_buffers` being counted
+//!   once per backend — there the accuracy was worth arguing about, here the two
+//!   sources agree to within shared libraries.
 //! - **Count** is `mariadb_system_process_group_count`, the number of matched
 //!   processes — normally `1` (plus a wrapper script, if used).
 //!
 //! Like the rest of `--collector.system` this only makes sense when the exporter
 //! is co-located with `MariaDB` and never touches the database.
 
-use crate::collectors::{Collected, Collector};
+use crate::collectors::{Collected, Collector, blocking};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use prometheus::{CounterVec, IntGaugeVec, Opts, Registry};
@@ -56,10 +59,79 @@ use super::cpu::ticks_to_seconds;
 /// Value of the `group` label.
 const GROUP: &str = "mariadb";
 
-/// Process-name prefixes that define the group. `mariadbd` is the modern server
-/// binary; `mysqld` covers older releases and compatibility installs.
+/// Which `/proc` source the process-group memory gauge is built from (Linux only).
+///
+/// This exists because the two sources differ in cost by orders of magnitude, not just in
+/// accuracy. See [`ProcessMemorySource::Pss`].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ProcessMemorySource {
+    /// **Default.** Resident set size, field 2 of `/proc/<pid>/statm`.
+    ///
+    /// One short, world-readable line per process that the kernel answers from already
+    /// maintained counters, so cost is `O(processes)` and independent of how much memory
+    /// the server has touched.
+    ///
+    /// Summing RSS over the group is safe for `MariaDB` specifically: the server is
+    /// thread-per-connection, so there is normally exactly one `mariadbd` process (plus a
+    /// wrapper script that maps almost nothing) and the buffer pool is counted once. The
+    /// double-counting that makes summed RSS meaningless for process-per-connection
+    /// databases has no group to double-count over here.
+    #[default]
+    Rss,
+    /// Proportional set size, read from `/proc/<pid>/smaps_rollup`. **Opt-in: expensive.**
+    ///
+    /// PSS divides each shared page by the number of processes mapping it, so pages shared
+    /// between several server instances on one host — or with anything else — are not
+    /// counted more than once. The kernel can only produce that number by walking **every
+    /// PTE of every VMA** of the process and checking each page's mapcount, which makes the
+    /// cost `O(processes × resident pages)` rather than `O(processes)`.
+    ///
+    /// Measured on the `PostgreSQL` primary in `nbari/pg_exporter#35` — 253 processes with
+    /// a 15939 MB shared segment — reading `smaps_rollup` for the group took **13.851 s**
+    /// versus **0.016 s** for the equivalent `stat` reads, ~866x, consuming 92% of a 15 s
+    /// scrape budget in one sub-collector. `MariaDB` normally runs one server process
+    /// rather than hundreds, so the absolute cost here is far lower — but it still scales
+    /// with how much of the buffer pool has been faulted in, which is exactly the number
+    /// that grows on the hosts where the exporter matters most.
+    ///
+    /// Enable with `--system.process-memory=pss` only when several `MariaDB` instances
+    /// share a host and the shared-page accounting is worth the walk.
+    Pss,
+}
+
+impl ProcessMemorySource {
+    /// CLI/env spelling of this variant.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Rss => "rss",
+            Self::Pss => "pss",
+        }
+    }
+
+    /// Parses the CLI/env spelling, case-insensitively.
+    ///
+    /// # Errors
+    ///
+    /// Returns a message naming the accepted values if `value` is neither.
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "rss" => Ok(Self::Rss),
+            "pss" => Ok(Self::Pss),
+            other => Err(format!(
+                "process memory source must be 'rss' or 'pss', got '{other}'"
+            )),
+        }
+    }
+}
+
+/// Process names that define the group, matched exactly (after trimming and
+/// lowercasing). `mariadbd` is the modern server binary; `mysqld` covers older
+/// releases and compatibility installs; the two wrapper scripts are part of the
+/// same service. Exact names, not prefixes, so that `mysqldump` and
+/// `mysqld_exporter` — which share the `mysqld` stem — never join the group.
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-const GROUP_PREFIXES: [&str; 2] = ["mariadbd", "mysqld"];
+const GROUP_NAMES: [&str; 4] = ["mariadbd", "mysqld", "mariadbd-safe", "mysqld_safe"];
 
 /// Whether per-process sampling is implemented for the current platform.
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
@@ -78,9 +150,7 @@ fn to_i64(value: u64) -> i64 {
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn is_group_member(process_name: &str) -> bool {
     let name = process_name.trim_end().to_ascii_lowercase();
-    GROUP_PREFIXES
-        .iter()
-        .any(|prefix| name.starts_with(prefix))
+    GROUP_NAMES.contains(&name.as_str())
 }
 
 /// One sampled process: its PID, cumulative CPU seconds, and resident bytes.
@@ -141,18 +211,52 @@ fn page_size() -> u64 {
 
 /// Reads PSS (bytes) for one PID, or `None` when `smaps_rollup` is unavailable
 /// (older kernels) or unreadable (insufficient privileges for that process).
+///
+/// **Expensive.** Reachable only through `--system.process-memory=pss`; see
+/// [`ProcessMemorySource::Pss`].
 #[cfg(target_os = "linux")]
 fn read_pss_bytes(pid: u32) -> Option<u64> {
     let content = std::fs::read_to_string(format!("/proc/{pid}/smaps_rollup")).ok()?;
     parse_pss_kb(&content).map(|kb| kb.saturating_mul(1024))
 }
 
-/// Reads RSS (bytes) for one PID from the world-readable `statm`, the fallback
-/// when PSS is not available.
+/// Reads RSS (bytes) for one PID from the world-readable `statm`. This is the default
+/// source; see [`ProcessMemorySource::Rss`].
 #[cfg(target_os = "linux")]
 fn read_rss_bytes(pid: u32, page_size: u64) -> Option<u64> {
     let content = std::fs::read_to_string(format!("/proc/{pid}/statm")).ok()?;
     parse_statm_resident_pages(&content).map(|pages| pages.saturating_mul(page_size))
+}
+
+/// Chooses between the two readers for `source`, and applies the PSS fallback.
+///
+/// Both readers are taken lazily and that is the whole point: in [`ProcessMemorySource::Rss`]
+/// mode `pss` must never be called, because calling it is the `O(processes × resident pages)`
+/// page-table walk of `nbari/pg_exporter#35`. Taking them as arguments also makes the
+/// dispatch testable without reading a live process, whose footprint moves between reads.
+#[cfg(target_os = "linux")]
+fn select_memory_source<P, R>(source: ProcessMemorySource, pss: P, statm: R) -> u64
+where
+    P: FnOnce() -> Option<u64>,
+    R: FnOnce() -> Option<u64>,
+{
+    match source {
+        ProcessMemorySource::Rss => statm(),
+        // PSS is unreadable without privileges on that process; fall back rather than
+        // reporting nothing.
+        ProcessMemorySource::Pss => pss().or_else(statm),
+    }
+    .unwrap_or(0)
+}
+
+/// Reads the memory figure for one PID from the configured source.
+#[cfg(target_os = "linux")]
+fn read_memory_bytes(pid: u32, page_size: u64, source: ProcessMemorySource) -> u64 {
+    select_memory_source(
+        source,
+        || read_pss_bytes(pid),
+        || read_rss_bytes(pid, page_size),
+    )
 }
 
 /// Samples every `mariadbd`/`mysqld` process on Linux by reading `/proc` directly.
@@ -161,8 +265,12 @@ fn read_rss_bytes(pid: u32, page_size: u64) -> Option<u64> {
 /// deliberately distinct from `Some(vec![])`: an empty vector means "the host was
 /// read and no server process is running here", while `None` means "the source is
 /// unreadable", which must never be published as a factual zero.
+///
+/// Blocking, synchronous I/O: callers must run this on the blocking pool via
+/// [`blocking::offload_coalesced`], never inline on a runtime worker
+/// (`nbari/pg_exporter#35`).
 #[cfg(target_os = "linux")]
-fn sample_processes() -> Option<Vec<ProcSample>> {
+fn sample_processes(source: ProcessMemorySource) -> Option<Vec<ProcSample>> {
     let hz = clk_tck();
     let bytes_per_page = page_size();
     let mut out = Vec::new();
@@ -187,9 +295,7 @@ fn sample_processes() -> Option<Vec<ProcSample>> {
             .and_then(|stat| parse_stat_cpu_ticks(&stat))
             .map_or(0.0, |ticks| ticks_to_seconds(ticks, hz));
 
-        let mem_bytes = read_pss_bytes(pid)
-            .or_else(|| read_rss_bytes(pid, bytes_per_page))
-            .unwrap_or(0);
+        let mem_bytes = read_memory_bytes(pid, bytes_per_page, source);
 
         out.push(ProcSample {
             pid,
@@ -202,11 +308,20 @@ fn sample_processes() -> Option<Vec<ProcSample>> {
 }
 
 /// Samples every `mariadbd`/`mysqld` process on FreeBSD via `sysinfo`. There is
-/// no cheap PSS, so memory is RSS (`Process::memory`).
+/// no cheap PSS, so memory is RSS (`Process::memory`) regardless of
+/// [`ProcessMemorySource`].
 ///
 /// Always returns `Some`: `sysinfo` reports an empty process list rather than a
 /// read failure, so there is no unreadable-source case to distinguish here.
+///
+/// Blocking, synchronous I/O: callers must run this on the blocking pool via
+/// [`blocking::offload_coalesced`], never inline on a runtime worker
+/// (`nbari/pg_exporter#35`).
 #[cfg(target_os = "freebsd")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "platform implementations share Option so Linux can report an unreadable process source"
+)]
 fn sample_processes(system: &Mutex<System>) -> Option<Vec<ProcSample>> {
     use sysinfo::{ProcessRefreshKind, ProcessesToUpdate};
 
@@ -245,16 +360,32 @@ fn sample_processes(system: &Mutex<System>) -> Option<Vec<ProcSample>> {
 ///
 /// **Metrics (labeled `group="mariadb"`):**
 /// - `mariadb_system_process_group_cpu_seconds_total` (counter, seconds)
-/// - `mariadb_system_process_group_memory_bytes` (gauge; PSS on Linux, RSS on FreeBSD)
+/// - `mariadb_system_process_group_memory_bytes` (gauge; RSS by default, PSS via
+///   `--system.process-memory=pss` on Linux)
 /// - `mariadb_system_process_group_count` (gauge)
 #[derive(Clone)]
 pub struct ProcessGroupCollector {
     cpu_seconds: CounterVec,
     memory_bytes: IntGaugeVec,
     proc_count: IntGaugeVec,
+    /// Which `/proc` file the memory gauge is read from. Only the Linux sampler
+    /// consults it: FreeBSD has no cheap PSS, and other platforms do not sample.
+    /// Which `/proc` file the Linux sampler reads a process's memory footprint from.
+    ///
+    /// Only Linux offers a choice: FreeBSD sampling goes through `sysinfo`, which exposes
+    /// RSS alone, and every other platform collects nothing at all, so the field is inert
+    /// there rather than genuinely dead. `#[expect(dead_code)]` would be wrong — the
+    /// `#[cfg(test)]` tests do read it, so `--all-targets` would trip
+    /// `unfulfilled_lint_expectations` and move the failure to the Linux clippy job.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    memory_source: ProcessMemorySource,
     /// Last observed cumulative CPU seconds per live PID, used to accumulate a
-    /// monotonic group counter across process churn.
+    /// monotonic group counter across process churn. Held across the sample so
+    /// two collections cannot publish their baselines out of order.
     prev_cpu: Arc<Mutex<HashMap<u32, f64>>>,
+    /// Caps the collector at one in-flight blocking sample; see
+    /// [`blocking::offload_coalesced`].
+    sample_slot: Arc<tokio::sync::Mutex<()>>,
     /// Persistent `sysinfo` state for FreeBSD sampling (unused on Linux, which
     /// reads `/proc` directly).
     #[cfg(target_os = "freebsd")]
@@ -273,7 +404,13 @@ impl Default for ProcessGroupCollector {
 }
 
 impl ProcessGroupCollector {
-    /// Creates a new `ProcessGroupCollector`.
+    /// Creates a new `ProcessGroupCollector` reading the default memory source.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_memory_source(ProcessMemorySource::default())
+    }
+
+    /// Creates a new `ProcessGroupCollector` reading `memory_source`.
     ///
     /// # Panics
     ///
@@ -281,7 +418,7 @@ impl ProcessGroupCollector {
     /// metric name or label set and therefore never at runtime.
     #[must_use]
     #[allow(clippy::expect_used)]
-    pub fn new() -> Self {
+    pub fn with_memory_source(memory_source: ProcessMemorySource) -> Self {
         let cpu_seconds = CounterVec::new(
             Opts::new(
                 "mariadb_system_process_group_cpu_seconds_total",
@@ -295,8 +432,9 @@ impl ProcessGroupCollector {
         let memory_bytes = IntGaugeVec::new(
             Opts::new(
                 "mariadb_system_process_group_memory_bytes",
-                "Resident memory of the host process group in bytes (Linux: PSS, so pages shared \
-                 with other processes are not double-counted; FreeBSD: summed RSS)",
+                "Resident memory of the host process group in bytes (summed RSS; MariaDB is \
+                 thread-per-connection so the buffer pool is counted once, set \
+                 --system.process-memory=pss for proportional shared-page accounting)",
             ),
             &["group"],
         )
@@ -315,7 +453,9 @@ impl ProcessGroupCollector {
             cpu_seconds,
             memory_bytes,
             proc_count,
+            memory_source,
             prev_cpu: Arc::new(Mutex::new(HashMap::new())),
+            sample_slot: Arc::new(tokio::sync::Mutex::new(())),
             #[cfg(target_os = "freebsd")]
             system: Arc::new(Mutex::new(System::new())),
             unsupported_warned: Arc::new(AtomicBool::new(false)),
@@ -323,7 +463,20 @@ impl ProcessGroupCollector {
         }
     }
 
+    /// Samples the host and publishes the result.
+    ///
+    /// Blocking: only ever reached through [`blocking::offload_coalesced`].
     fn collect_stats(&self) {
+        #[cfg(target_os = "linux")]
+        self.collect_stats_with(|| sample_processes(self.memory_source));
+        #[cfg(target_os = "freebsd")]
+        self.collect_stats_with(|| sample_processes(&self.system));
+        #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+        self.collect_stats_with(|| None);
+    }
+
+    /// Guards the platform check, then samples and publishes under the CPU baseline lock.
+    fn collect_stats_with(&self, sample: impl FnOnce() -> Option<Vec<ProcSample>>) {
         if !SUPPORTED {
             if !self.unsupported_warned.swap(true, Ordering::Relaxed) {
                 warn!(
@@ -334,17 +487,39 @@ impl ProcessGroupCollector {
             return;
         }
 
-        #[cfg(target_os = "linux")]
-        let observed = sample_processes();
-        #[cfg(target_os = "freebsd")]
-        let observed = sample_processes(&self.system);
-        #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
-        let observed: Option<Vec<ProcSample>> = None;
-
-        self.apply_samples(observed);
+        self.sample_and_publish(sample);
     }
 
-    /// Publishes a process-group snapshot.
+    /// Takes the CPU baseline lock, **then** samples, then publishes.
+    ///
+    /// The order is load-bearing. `mariadb_system_process_group_cpu_seconds_total` is
+    /// accumulated from per-PID deltas against `prev_cpu`, so if the sample happened
+    /// outside the lock a newer collection could publish its baseline first, the older one
+    /// would then find every total lower than the baseline, count no delta and overwrite
+    /// the baseline with its own older values — and the next pass would re-count the
+    /// interval between them, inflating the counter above the CPU actually consumed.
+    ///
+    /// `try_lock`, not `lock`: an overlapping collection skips rather than queueing behind
+    /// a `/proc` walk. The outer one-slot guard in [`blocking::offload_coalesced`] already
+    /// prevents scrape-driven overlap; this is the defence for direct calls.
+    fn sample_and_publish(&self, sample: impl FnOnce() -> Option<Vec<ProcSample>>) {
+        let mut prev = match self.prev_cpu.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                debug!("a previous process-group sample is still running; skipping this one");
+                return;
+            }
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => {
+                warn!("process-group cpu mutex was poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+
+        let observed = sample();
+        self.publish(&mut prev, observed);
+    }
+
+    /// Publishes a process-group snapshot against the already-locked CPU baseline.
     ///
     /// `None` means the process table could not be read and preserves the last good
     /// snapshot, matching the `Err` half of the settlement contract. Publishing zeros
@@ -352,7 +527,7 @@ impl ProcessGroupCollector {
     /// assertion the exporter cannot make when it could not read the source at all.
     /// `Some(vec![])` is different: the host was read and no server process runs here,
     /// so an honest zero is published.
-    fn apply_samples(&self, observed: Option<Vec<ProcSample>>) {
+    fn publish(&self, prev: &mut HashMap<u32, f64>, observed: Option<Vec<ProcSample>>) {
         let Some(samples) = observed else {
             if !self.unreadable_warned.swap(true, Ordering::Relaxed) {
                 warn!(
@@ -361,14 +536,6 @@ impl ProcessGroupCollector {
                 );
             }
             return;
-        };
-
-        let mut prev = match self.prev_cpu.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => {
-                warn!("process-group cpu mutex was poisoned, recovering");
-                poisoned.into_inner()
-            }
         };
 
         let mut delta_total = 0.0_f64;
@@ -390,7 +557,6 @@ impl ProcessGroupCollector {
 
         let count = i64::try_from(samples.len()).unwrap_or(i64::MAX);
         *prev = current;
-        drop(prev);
 
         // Materialise the counter on every fresh scrape, even when the delta is
         // zero: having observed the group, "0 additional CPU seconds" is a
@@ -410,6 +576,15 @@ impl ProcessGroupCollector {
             mem_bytes = mem_total,
             "updated mariadb process-group metrics"
         );
+    }
+
+    /// Publishes `observed` directly, bypassing the platform gate.
+    ///
+    /// Used by tests to drive the settlement paths (`None` versus `Some(vec![])`) on hosts
+    /// where per-process sampling is not implemented.
+    #[cfg(test)]
+    fn apply_samples(&self, observed: Option<Vec<ProcSample>>) {
+        self.sample_and_publish(|| observed);
     }
 }
 
@@ -434,12 +609,31 @@ impl Collector for ProcessGroupCollector {
     #[instrument(skip(self, _pool), level = "debug")]
     fn collect_once<'a>(&'a self, _pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
-            if !SUPPORTED {
-                self.collect_stats();
-                return Ok(Collected::Skipped);
+            // Blocking `/proc` walk: never run this on a runtime worker. Inline it and a
+            // slow walk stops every other collector's futures being polled, which surfaces
+            // as a bogus "pool timed out while waiting for an open connection"
+            // (`nbari/pg_exporter#35`).
+            let collector = self.clone();
+            // Deliberately not `?`: a collector `Err` makes the registry withhold every
+            // database-dependent family for the scrape, and an optional host-metrics
+            // collector must never be able to blank out the database metrics. A sample
+            // that did not complete warns and preserves the last good values, exactly
+            // like an unreadable `/proc`.
+            if let Err(error) = blocking::offload_coalesced(
+                "system.process",
+                &self.sample_slot,
+                move || collector.collect_stats(),
+            )
+            .await
+            {
+                warn!("collector.system process-group sample did not complete: {error}");
             }
-            self.collect_stats();
-            Ok(Collected::Fresh)
+
+            if SUPPORTED {
+                Ok(Collected::Fresh)
+            } else {
+                Ok(Collected::Skipped)
+            }
         })
     }
 
@@ -448,9 +642,14 @@ impl Collector for ProcessGroupCollector {
         self.cpu_seconds.reset();
         self.memory_bytes.reset();
         self.proc_count.reset();
-        match self.prev_cpu.lock() {
+        match self.prev_cpu.try_lock() {
             Ok(mut guard) => guard.clear(),
-            Err(poisoned) => {
+            Err(std::sync::TryLockError::WouldBlock) => {
+                // A sample holds the baseline. Leaving it is harmless: the series were
+                // removed, and the next sample re-establishes them from real deltas.
+                debug!("process-group sample in flight; leaving the CPU baseline in place");
+            }
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => {
                 warn!("process-group cpu mutex was poisoned, recovering");
                 poisoned.into_inner().clear();
             }
@@ -502,9 +701,13 @@ mod tests {
     #[test]
     fn group_matching_rejects_unrelated_processes() {
         assert!(!is_group_member("postgres"));
-        assert!(!is_group_member("mariadb_exporter"));
         assert!(!is_group_member("mariadb"), "the client is not the server");
         assert!(!is_group_member(""));
+        // Exact names, not prefixes: tools sharing the `mysqld` stem stay out.
+        assert!(!is_group_member("mariadb_exporter"));
+        assert!(!is_group_member("mariadbd-extra"));
+        assert!(!is_group_member("mysqldump"));
+        assert!(!is_group_member("mysqld_exporter"));
     }
 
     #[cfg(target_os = "linux")]
@@ -538,6 +741,148 @@ mod tests {
     fn parse_statm_resident_pages_reads_second_field() {
         assert_eq!(parse_statm_resident_pages("2048 512 128 1 0 300 0"), Some(512));
         assert_eq!(parse_statm_resident_pages("2048"), None);
+    }
+
+    /// `pg_exporter` reads `resident - shared` from this same line, because summing
+    /// resident pages across its one-process-per-backend model charged `shared_buffers`
+    /// to every backend (`nbari/pg_exporter#36`: 312 GiB reported on a 93.8 GiB host).
+    ///
+    /// MariaDB is thread-per-connection, so the group is a single `mariadbd` whose shared
+    /// pages are the binary and its libraries — a flat ~24 MB that does not grow with
+    /// sessions (measured on `mariadb:11.4`: 1 process and the same 24 MB gap at idle and
+    /// at 61 connections). Subtracting it would under-report resident memory the server
+    /// really holds, so field 2 is used unmodified.
+    ///
+    /// This test exists so that porting `#36` is a deliberate act rather than a silent
+    /// sync: it fails the moment the shared field starts being subtracted.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parse_statm_resident_pages_does_not_subtract_shared_pages() {
+        // size=2048, resident=512, shared=128. `resident - shared` would be 384.
+        let statm = "2048 512 128 1 0 300 0";
+        assert_eq!(
+            parse_statm_resident_pages(statm),
+            Some(512),
+            "the RSS source must report resident pages as-is; subtracting the shared field \
+             is pg_exporter's fix for per-backend shared memory, which thread-per-connection \
+             MariaDB does not have"
+        );
+
+        // A process whose pages are almost entirely shared must still report them.
+        assert_eq!(parse_statm_resident_pages("4096 900 890 1 0 300 0"), Some(900));
+    }
+
+    #[test]
+    fn memory_source_defaults_to_rss() {
+        assert_eq!(ProcessMemorySource::default(), ProcessMemorySource::Rss);
+        assert_eq!(ProcessGroupCollector::new().memory_source, ProcessMemorySource::Rss);
+    }
+
+    #[test]
+    fn memory_source_round_trips_through_its_cli_spelling() {
+        for source in [ProcessMemorySource::Rss, ProcessMemorySource::Pss] {
+            assert_eq!(ProcessMemorySource::parse(source.as_str()), Ok(source));
+        }
+        assert_eq!(
+            ProcessMemorySource::parse("  PSS "),
+            Ok(ProcessMemorySource::Pss),
+            "parsing must be case- and whitespace-insensitive"
+        );
+        assert!(ProcessMemorySource::parse("smaps").is_err());
+    }
+
+    #[test]
+    fn with_memory_source_is_honoured() {
+        assert_eq!(
+            ProcessGroupCollector::with_memory_source(ProcessMemorySource::Pss).memory_source,
+            ProcessMemorySource::Pss
+        );
+    }
+
+    /// The whole point of the opt-in: in the default mode the `smaps_rollup` reader must
+    /// never even be *called*, because calling it is the page-table walk.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn rss_mode_never_touches_the_smaps_rollup_reader() {
+        let pss_calls = std::cell::Cell::new(0_u32);
+
+        let bytes = select_memory_source(
+            ProcessMemorySource::Rss,
+            || {
+                pss_calls.set(pss_calls.get() + 1);
+                Some(999)
+            },
+            || Some(4096),
+        );
+
+        assert_eq!(bytes, 4096, "rss mode must report the statm reader's value");
+        assert_eq!(
+            pss_calls.get(),
+            0,
+            "rss mode called the smaps_rollup reader: that is the O(processes x resident \
+             pages) page-table walk of nbari/pg_exporter#35, which the default must never \
+             perform"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pss_mode_reads_pss_and_falls_back_to_statm_when_it_is_unreadable() {
+        assert_eq!(
+            select_memory_source(ProcessMemorySource::Pss, || Some(999), || Some(4096)),
+            999,
+            "pss mode must report the smaps_rollup reader's value, or \
+             --system.process-memory=pss silently does nothing"
+        );
+        assert_eq!(
+            select_memory_source(ProcessMemorySource::Pss, || None, || Some(4096)),
+            4096,
+            "pss mode must fall back to statm when smaps_rollup is unreadable"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn both_sources_report_zero_when_nothing_is_readable() {
+        for source in [ProcessMemorySource::Rss, ProcessMemorySource::Pss] {
+            assert_eq!(select_memory_source(source, || None, || None), 0);
+        }
+    }
+
+    /// An overlapping direct collection must skip rather than interleave: two passes that
+    /// published their CPU baselines out of order would make the group counter over-report.
+    #[test]
+    fn a_concurrent_collection_skips_instead_of_interleaving_samples() {
+        let collector = ProcessGroupCollector::new();
+
+        collector.apply_samples(Some(vec![ProcSample {
+            pid: 4242,
+            cpu_seconds: 5.0,
+            mem_bytes: 1_000_000,
+        }]));
+
+        let sampled = std::cell::Cell::new(false);
+        #[allow(clippy::unwrap_used)]
+        let held = collector.prev_cpu.lock().unwrap();
+
+        collector.sample_and_publish(|| {
+            sampled.set(true);
+            Some(Vec::new())
+        });
+
+        assert!(
+            !sampled.get(),
+            "a second collection sampled while the CPU baseline was locked: overlapping \
+             passes can then publish baselines out of order and the group CPU counter \
+             over-reports"
+        );
+        drop(held);
+
+        assert_eq!(
+            collector.memory_bytes.with_label_values(&[GROUP]).get(),
+            1_000_000,
+            "the skipped collection must not have overwritten the previous snapshot"
+        );
     }
 
     #[test]

@@ -1,3 +1,4 @@
+use crate::collectors::system::ProcessMemorySource;
 use clap::{
     Arg, ArgAction, ColorChoice, Command,
     builder::styling::{AnsiColor, Effects, Styles},
@@ -8,6 +9,62 @@ mod collectors;
 pub mod built_info {
     #![allow(clippy::doc_markdown)]
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
+/// CLI spelling of [`DEFAULT_SCRAPE_TIMEOUT_MS`]. Kept in sync by
+/// `scrape_timeout_default_matches_const`.
+const SCRAPE_TIMEOUT_MS_DEFAULT: &str = "15000";
+
+/// Flags that shape how a scrape is executed, rather than what it collects.
+fn scrape_runtime_args(cmd: Command) -> Command {
+    cmd.arg(
+        Arg::new("scrape.timeout-ms")
+            .long("scrape.timeout-ms")
+            .help("Wall-clock budget for one /metrics scrape, in milliseconds")
+            .long_help(
+                "Wall-clock budget for one /metrics scrape, in milliseconds.\n\n\
+                 A scrape that exceeds it is aborted and answered with 504 Gateway Timeout;\n\
+                 aborting drops the in-flight queries so their pooled connections are\n\
+                 returned instead of being parked server-side.\n\n\
+                 /metrics is single-flight: while a scrape is running, another one is\n\
+                 refused with 503 Service Unavailable rather than doubling the load on an\n\
+                 already-slow server. The gate is released on every exit path, including\n\
+                 this timeout and a client disconnect, so it cannot wedge.\n\n\
+                 Set it below your Prometheus scrape_timeout so the exporter, not the\n\
+                 scraper, decides when to give up. Note the shipped default does not do\n\
+                 this: 15000 is above Prometheus's own 10s default, so out of the box the\n\
+                 scraper disconnects first and the abort takes the client-disconnect path\n\
+                 (the gate is still released, and collectors already in flight are still\n\
+                 counted as aborted). Lower it below your scrape_timeout to make the\n\
+                 exporter's 504 the decisive signal.",
+            )
+            .default_value(SCRAPE_TIMEOUT_MS_DEFAULT)
+            .env("MARIADB_EXPORTER_SCRAPE_TIMEOUT_MS")
+            .value_name("MS")
+            .value_parser(clap::value_parser!(u64).range(1..)),
+    )
+    .arg(
+        Arg::new("system.process-memory")
+            .long("system.process-memory")
+            .help("Source for the system collector's process-group memory gauge [rss|pss]")
+            .long_help(
+                "Where --collector.system reads MariaDB process-group memory from (Linux).\n\n\
+                 - rss (default): /proc/<pid>/statm. One short, already-maintained line per\n\
+                   process, so cost is O(processes). MariaDB is thread-per-connection, so a\n\
+                   single mariadbd process serves every session and the InnoDB buffer pool is\n\
+                   counted exactly once.\n\
+                 - pss: /proc/<pid>/smaps_rollup. Divides shared pages proportionally, which\n\
+                   only matters when several instances share a host. The kernel must walk\n\
+                   every page-table entry of every mapping to produce it, making the cost\n\
+                   O(processes x resident pages); measured at ~866x the rss reads on a large\n\
+                   sibling deployment. Opt in only when you need the shared-page accounting.\n\n\
+                 Ignored on FreeBSD, where only RSS is available.",
+            )
+            .default_value(ProcessMemorySource::default().as_str())
+            .env("MARIADB_EXPORTER_SYSTEM_PROCESS_MEMORY")
+            .value_name("SOURCE")
+            .value_parser(ProcessMemorySource::parse),
+    )
 }
 
 #[must_use]
@@ -102,12 +159,107 @@ pub fn new() -> Command {
                 .action(ArgAction::Count),
         );
 
-    collectors::add_collectors_args(cmd)
+    collectors::add_collectors_args(scrape_runtime_args(cmd))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The clap default is a string; the registry default is a `u64`. If they ever
+    /// drift, `--scrape.timeout-ms` silently stops matching the documented default.
+    #[test]
+    fn scrape_timeout_default_matches_const() {
+        use crate::collectors::DEFAULT_SCRAPE_TIMEOUT_MS;
+
+        assert_eq!(
+            SCRAPE_TIMEOUT_MS_DEFAULT.parse::<u64>().ok(),
+            Some(DEFAULT_SCRAPE_TIMEOUT_MS),
+        );
+    }
+
+    #[test]
+    fn scrape_timeout_parses_and_rejects_zero() {
+        let matches = new()
+            .try_get_matches_from([
+                "mariadb_exporter",
+                "--dsn",
+                "mysql://x",
+                "--scrape.timeout-ms",
+                "250",
+            ])
+            .ok();
+        assert_eq!(
+            matches
+                .as_ref()
+                .and_then(|m| m.get_one::<u64>("scrape.timeout-ms"))
+                .copied(),
+            Some(250)
+        );
+
+        assert!(
+            new()
+                .try_get_matches_from([
+                    "mariadb_exporter",
+                    "--dsn",
+                    "mysql://x",
+                    "--scrape.timeout-ms",
+                    "0",
+                ])
+                .is_err(),
+            "a zero budget would make every scrape time out"
+        );
+    }
+
+    #[test]
+    fn system_process_memory_defaults_to_rss() {
+        let matches = new()
+            .try_get_matches_from(["mariadb_exporter", "--dsn", "mysql://x"])
+            .ok();
+
+        assert_eq!(
+            matches
+                .as_ref()
+                .and_then(|m| m.get_one::<ProcessMemorySource>("system.process-memory"))
+                .copied(),
+            Some(ProcessMemorySource::Rss),
+            "smaps_rollup is ~866x more expensive than statm; it must stay opt-in"
+        );
+    }
+
+    #[test]
+    fn system_process_memory_accepts_pss_and_rejects_junk() {
+        let matches = new()
+            .try_get_matches_from([
+                "mariadb_exporter",
+                "--dsn",
+                "mysql://x",
+                "--system.process-memory",
+                "PSS",
+            ])
+            .ok();
+
+        assert_eq!(
+            matches
+                .as_ref()
+                .and_then(|m| m.get_one::<ProcessMemorySource>("system.process-memory"))
+                .copied(),
+            Some(ProcessMemorySource::Pss)
+        );
+
+        assert!(
+            new()
+                .try_get_matches_from([
+                    "mariadb_exporter",
+                    "--dsn",
+                    "mysql://x",
+                    "--system.process-memory",
+                    "smaps",
+                ])
+                .is_err(),
+            "an unknown source must be rejected, not silently treated as rss"
+        );
+    }
 
     #[test]
     #[allow(clippy::unwrap_used)]

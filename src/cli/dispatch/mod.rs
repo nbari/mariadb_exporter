@@ -1,13 +1,16 @@
 use crate::{
     cli::actions::Action,
     collectors::{
-        COLLECTOR_NAMES, Collector, all_factories,
+        COLLECTOR_NAMES, Collector, DEFAULT_SCRAPE_TIMEOUT_MS, all_factories,
+        config::CollectorConfig,
+        system::ProcessMemorySource,
         util::{get_excluded_databases, set_excluded_databases},
     },
 };
 use anyhow::{Result, anyhow};
 use clap::ArgMatches;
 use secrecy::SecretString;
+use std::time::Duration;
 use tracing::info;
 
 /// # Errors
@@ -38,11 +41,28 @@ pub fn handler(matches: &clap::ArgMatches) -> Result<Action> {
             .ok_or_else(|| anyhow!("DSN is required. Please provide it using the --dsn flag."))?,
     );
 
+    let scrape_timeout = Duration::from_millis(
+        matches
+            .get_one::<u64>("scrape.timeout-ms")
+            .copied()
+            .unwrap_or(DEFAULT_SCRAPE_TIMEOUT_MS),
+    );
+
+    let process_memory = matches
+        .get_one::<ProcessMemorySource>("system.process-memory")
+        .copied()
+        .unwrap_or_default();
+
+    let config = CollectorConfig::new()
+        .with_enabled(&get_enabled_collectors(matches))
+        .with_scrape_timeout(scrape_timeout)
+        .with_system_process_memory(process_memory);
+
     Ok(Action::Run {
         port,
         listen,
         dsn,
-        collectors: get_enabled_collectors(matches),
+        config,
     })
 }
 

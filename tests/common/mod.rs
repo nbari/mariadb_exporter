@@ -57,6 +57,41 @@ pub async fn wait_for_server(port: u16, max_attempts: u32) -> bool {
     false
 }
 
+/// Start the exporter on a fresh port, retrying a few times when startup fails.
+///
+/// [`get_available_port`] releases its probe socket before returning, so another process
+/// can claim the port in the gap before the exporter binds it. Rather than pinning that
+/// race into every server test, treat a failed [`wait_for_server`] as a lost race and try
+/// again on a new port.
+#[allow(dead_code)]
+pub async fn start_exporter_with_retry(
+    dsn: secrecy::SecretString,
+    config: mariadb_exporter::collectors::config::CollectorConfig,
+) -> Result<(u16, tokio::task::JoinHandle<Result<()>>)> {
+    const MAX_ATTEMPTS: u32 = 5;
+
+    for _ in 1..=MAX_ATTEMPTS {
+        let port = get_available_port();
+        let handle = tokio::spawn({
+            let dsn = dsn.clone();
+            let config = config.clone();
+            async move { mariadb_exporter::exporter::new(port, None, dsn, config).await }
+        });
+
+        if wait_for_server(port, 50).await {
+            return Ok((port, handle));
+        }
+
+        handle.abort();
+        // Let the aborted task release whatever it bound before the next attempt.
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    Err(anyhow::anyhow!(
+        "exporter failed to start after {MAX_ATTEMPTS} attempts"
+    ))
+}
+
 /// Check if a specific table exists
 #[allow(dead_code)]
 pub async fn table_exists(pool: &MySqlPool, schema: &str, table: &str) -> Result<bool> {

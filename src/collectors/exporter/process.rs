@@ -1,4 +1,4 @@
-use crate::collectors::{Collected, Collector};
+use crate::collectors::{Collected, Collector, blocking};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use prometheus::{Gauge, IntGauge, Opts, Registry};
@@ -19,6 +19,9 @@ pub struct ProcessCollector {
     start_time_seconds: Gauge,
     system: Arc<Mutex<SystemState>>,
     pid: Pid,
+    /// Caps the collector at one in-flight blocking sample; see
+    /// [`blocking::offload_coalesced`].
+    sample_slot: Arc<tokio::sync::Mutex<()>>,
 }
 
 struct SystemState {
@@ -102,6 +105,7 @@ impl ProcessCollector {
             start_time_seconds,
             system,
             pid,
+            sample_slot: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
@@ -190,7 +194,24 @@ impl Collector for ProcessCollector {
     #[instrument(skip(self, _pool), level = "debug")]
     fn collect_once<'a>(&'a self, _pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
-            self.collect_stats();
+            // Blocking `sysinfo` refresh and `/proc/<pid>/fd` read: never run these on a
+            // runtime worker (`nbari/pg_exporter#35`). Only this one PID is refreshed, so
+            // the walk is small — but "small" is a property of the host, not of the code,
+            // and on a box where every file I/O is taxed by an endpoint-security agent it
+            // is the same stall in miniature.
+            let collector = self.clone();
+            // Deliberately not `?`: a collector `Err` makes the registry withhold every
+            // database-dependent family for the scrape, and an optional host-metrics
+            // collector must never be able to blank out the database metrics. A sample
+            // that did not complete warns and preserves the last good values, exactly
+            // like an unreadable `/proc`.
+            if let Err(error) = blocking::offload_coalesced("metrics.process", &self.sample_slot, move || {
+                collector.collect_stats();
+            })
+            .await
+            {
+                warn!("collector.exporter process sample did not complete: {error}");
+            }
             Ok(Collected::Fresh)
         })
     }
@@ -253,7 +274,10 @@ mod tests {
         assert!(rss_mb > 1);
         assert!(rss_mb < 10_000);
         assert!(vsz_mb > rss_mb);
-        assert!(vsz_mb < 100_000);
+
+        // No upper bound on VSZ: it counts reservations, not memory. macOS on arm64
+        // maps hundreds of gigabytes of address space into every process, so any
+        // fixed ceiling here tests the platform's allocator rather than the collector.
     }
 
     #[test]

@@ -18,7 +18,7 @@
 //! reclaimable memory; there, prefer `used`/`free` and treat the `available`
 //! series as a conservative floor.
 
-use crate::collectors::{Collected, Collector};
+use crate::collectors::{Collected, Collector, blocking};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use prometheus::{IntGauge, Opts, Registry};
@@ -54,6 +54,9 @@ pub struct MemoryCollector {
     swap_used: IntGauge,
     swap_free: IntGauge,
     system: Arc<Mutex<System>>,
+    /// Caps the collector at one in-flight blocking sample; see
+    /// [`blocking::offload_coalesced`].
+    sample_slot: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Default for MemoryCollector {
@@ -129,6 +132,7 @@ impl MemoryCollector {
             swap_used,
             swap_free,
             system,
+            sample_slot: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
@@ -182,7 +186,21 @@ impl Collector for MemoryCollector {
     #[instrument(skip(self, _pool), level = "debug")]
     fn collect_once<'a>(&'a self, _pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
         Box::pin(async move {
-            self.collect_stats();
+            // Blocking `sysinfo` refresh: never run this on a runtime worker
+            // (`nbari/pg_exporter#35`).
+            let collector = self.clone();
+            // Deliberately not `?`: a collector `Err` makes the registry withhold every
+            // database-dependent family for the scrape, and an optional host-metrics
+            // collector must never be able to blank out the database metrics. A sample
+            // that did not complete warns and preserves the last good values, exactly
+            // like an unreadable `/proc`.
+            if let Err(error) = blocking::offload_coalesced("system.memory", &self.sample_slot, move || {
+                collector.collect_stats();
+            })
+            .await
+            {
+                warn!("collector.system memory sample did not complete: {error}");
+            }
             Ok(Collected::Fresh)
         })
     }

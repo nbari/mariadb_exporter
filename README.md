@@ -13,7 +13,7 @@ MariaDB metrics exporter for Prometheus written in Rust.
 * **Compatibility** – Metric names align with Prometheus `mysqld_exporter` (prefixed `mariadb_`).
 * **Lean defaults** – Essential availability, InnoDB, and replication metrics enabled by default; optional collectors opt-in.
 * **Low footprint** – Designed to minimize cardinality and avoid expensive scans.
-* **Resilient** – Always serves `/metrics` (HTTP 200) even when MariaDB is unreachable. During an outage, `mariadb_up` becomes `0`, and DB-dependent metrics are omitted to avoid stale data.
+* **Resilient** – Serves `/metrics` (HTTP 200) even when MariaDB is unreachable. During an outage, `mariadb_up` becomes `0`, and DB-dependent metrics are omitted to avoid stale data. Only an overload of the exporter itself is signalled with a status code — see [Scrape concurrency and timeout](#scrape-concurrency-and-timeout).
 * **No stale data** – A collector never serves a previous scrape's values as current. If its source becomes unavailable (plugin uninstalled, `performance_schema` table missing, feature disabled, privilege revoked) the series it owned *disappear* instead of freezing. See [Scrape outcomes](#scrape-outcomes).
 
 ## Download or build
@@ -106,7 +106,7 @@ Collectors are toggled with `--collector.<name>` or `--no-collector.<name>`.
 * `--collector.locks` – Metadata/table lock waits from `performance_schema`.
 * `--collector.metadata` – `metadata_lock_info` table counts.
 * `--collector.userstat` – Per-user stats (requires `@@userstat=1` and `USER_STATISTICS`).
-* `--collector.system` – Host CPU/memory/load and `MariaDB` process-group usage, read from the OS (never from the database). Only meaningful when the exporter runs on the database host. See [`src/collectors/system/README.md`](src/collectors/system/README.md).
+* `--collector.system` – Host CPU/memory/load and `MariaDB` process-group usage, read from the OS (never from the database). Only meaningful when the exporter runs on the database host. See [`src/collectors/system/README.md`](src/collectors/system/README.md). Process-group memory is read from `/proc/<pid>/statm` (RSS); `--system.process-memory=pss` switches to `/proc/<pid>/smaps_rollup`, which accounts shared pages proportionally but makes the kernel walk every page-table entry — budget for it before enabling.
 
 ### Enabled by default
 
@@ -216,6 +216,59 @@ registry accordingly.
 Connectivity failure is unchanged: HTTP 200, `mariadb_up 0`, fresh exporter/build metrics,
 and no database metrics. `mariadb_up` is never fabricated to `0` because a collector failed
 — the connectivity check succeeded, so it stays `1`.
+
+### Scrape concurrency and timeout
+
+The three outcomes above describe a scrape that *ran*. Two situations are about the scrape
+itself and are answered with a status code instead, because there is no honest exposition to
+return:
+
+| Situation | Status | Meaning |
+| --- | --- | --- |
+| A scrape is already in flight | `503 Service Unavailable` | `/metrics` is single-flight. Overlapping scrapes are refused rather than piled onto an already-slow server. |
+| The scrape exceeded `--scrape.timeout-ms` | `504 Gateway Timeout` | The scrape was **aborted**, so its in-flight queries were dropped and their pooled connections returned. |
+
+`--scrape.timeout-ms` defaults to `15000`. Set it below your Prometheus `scrape_timeout` so
+the exporter, not the scraper, decides when to give up.
+
+Note that the shipped default does **not** satisfy that advice: Prometheus's own
+`scrape_timeout` defaults to `10s`, which is below `15000`ms, so with both defaults the
+scraper gives up first and the exporter's budget never fires. Nothing breaks — the client
+disconnect drops the request future, which releases the gate and aborts the scrape — but the
+`504` never appears and the decision of when to give up stays with Prometheus. Lower
+`--scrape.timeout-ms` below your `scrape_timeout` to move it back to the exporter.
+
+The single-flight gate is held by the *request*, not by the scrape task. It is therefore
+released on every exit path — success, collector error, panic, timeout, and client
+disconnect — so a scrape that never finishes cannot wedge `/metrics` at `503` permanently
+([`nbari/pg_exporter#34`][issue-34]).
+
+A gate release is not a promise that all work has finished: a `spawn_blocking` sample already
+running cannot be cancelled, and the server may still be finishing a statement it was told to
+stop. The gate bounds *exporter* concurrency, not server-side work; a role-level connection
+limit is the hard backstop there.
+
+An aborted scrape is recorded as an abort, never as a success: every collector still in
+flight increments
+`mariadb_exporter_collector_scrape_aborted_total{collector="..."}` and reports
+`mariadb_exporter_collector_last_scrape_success 0`. Alert on
+`rate(mariadb_exporter_collector_scrape_aborted_total[5m]) > 0` to catch a collector that
+is not finishing within `--scrape.timeout-ms` — the collector is not necessarily at fault,
+since the abort bounds the whole scrape.
+
+Per-collector timers only start *after* the connectivity check, so a scrape abandoned while
+`SELECT 1` is still in flight moves none of them. `mariadb_exporter_scrape_aborted_total`
+counts that case: it is incremented once per scrape, without a `collector` label, whenever a
+scrape exceeds `--scrape.timeout-ms`.
+
+The two counters are deliberately asymmetric, because a client disconnect and a budget
+timeout are not observed the same way. A disconnect drops the request future, so no code in
+the exporter runs at that point — it cannot increment a scrape-level counter. Those aborts
+are visible only through the per-collector counter, and only for collectors that had already
+started. A budget timeout, by contrast, is observed by the exporter itself and increments
+both.
+
+[issue-34]: https://github.com/nbari/pg_exporter/issues/34
 
 ### Alerting implications
 

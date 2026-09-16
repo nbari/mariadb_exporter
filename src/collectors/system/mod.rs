@@ -20,12 +20,14 @@
 //! so the CPU/memory numbers describe the exporter's host, not the database
 //! server, and would be misleading.
 
-use crate::collectors::{Collected, Collector};
+use crate::collectors::{Collected, Collector, registry::panic_payload_message};
 use anyhow::Result;
 use futures::future::BoxFuture;
 use futures::stream::{FuturesUnordered, StreamExt};
+use futures::FutureExt as _;
 use prometheus::Registry;
 use sqlx::MySqlPool;
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use tracing::{debug, info_span, instrument, warn};
 use tracing_futures::Instrument as _;
@@ -36,6 +38,7 @@ pub mod process;
 
 use cpu::CpuCollector;
 use memory::MemoryCollector;
+pub use process::ProcessMemorySource;
 use process::ProcessGroupCollector;
 
 /// Host CPU, memory and `MariaDB` process-group statistics for the machine
@@ -58,14 +61,21 @@ impl Default for SystemCollector {
 }
 
 impl SystemCollector {
-    /// Creates a new `SystemCollector`.
+    /// Creates a new `SystemCollector` with default settings.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_config(ProcessMemorySource::default())
+    }
+
+    /// Creates a new `SystemCollector` reading process-group memory from
+    /// `process_memory`.
+    #[must_use]
+    pub fn with_config(process_memory: ProcessMemorySource) -> Self {
         Self {
             subs: vec![
                 Arc::new(CpuCollector::new()),
                 Arc::new(MemoryCollector::new()),
-                Arc::new(ProcessGroupCollector::new()),
+                Arc::new(ProcessGroupCollector::with_memory_source(process_memory)),
             ],
         }
     }
@@ -112,11 +122,48 @@ impl Collector for SystemCollector {
                     sub_collector = %sub.name(),
                     otel.kind = "internal"
                 );
-                tasks.push(sub.collect(pool).instrument(span));
+                let name = sub.name();
+                tasks.push(
+                    async move {
+                        // Panic boundary mirroring the registry's `collect_with_outcome`.
+                        // The real subs run their risky OS reads inside
+                        // `blocking::offload_coalesced` (a panic there surfaces as a
+                        // `JoinError` → `Err`), but a panic in the async glue — metric
+                        // publication, future construction — would otherwise unwind
+                        // through the drain below up to the registry's boundary, marking
+                        // the whole `system` collector failed and withholding every
+                        // database-dependent family for the scrape. Convert it to an
+                        // ordinary `Err` so the warn-and-continue path below covers
+                        // panics exactly like errors.
+                        let future = async move { sub.collect(pool).await };
+                        let result = match AssertUnwindSafe(future).catch_unwind().await {
+                            Ok(result) => result,
+                            Err(payload) => Err(anyhow::anyhow!(
+                                "sub-collector panicked: {}",
+                                panic_payload_message(payload.as_ref())
+                            )),
+                        };
+                        (name, result)
+                    }
+                    .instrument(span),
+                );
             }
 
-            while let Some(res) = tasks.next().await {
-                res?;
+            // Deliberately not `?`. A sub-collector Err would fail the whole `system`
+            // collector, and the registry withholds every database-dependent family for a
+            // scrape in which any collector errored — so an optional host-metrics collector
+            // could blank out the MariaDB metrics. Each sub already settles its own metrics
+            // through `Collector::collect`, and the `catch_unwind` above routes a panicked
+            // sub through this same path; report the failure and keep the rest.
+            while let Some((name, res)) = tasks.next().await {
+                if let Err(error) = res {
+                    warn!(
+                        sub_collector = name,
+                        %error,
+                        "system sub-collector failed; continuing so host metrics cannot blank \
+                         out the database metrics"
+                    );
+                }
             }
 
             Ok(Collected::Fresh)
@@ -173,5 +220,144 @@ mod tests {
 
         // Nothing panics and the umbrella delegates to every child.
         Collector::reset_metrics(&collector);
+    }
+
+    /// A sub-collector `Err` must not fail the umbrella.
+    ///
+    /// The registry withholds every database-dependent family for a scrape in which any
+    /// collector returned `Err`, so propagating here would let an optional host-metrics
+    /// collector blank out the MariaDB metrics — the exact inversion this change set exists
+    /// to prevent. All three real subs are infallible today; this pins the contract for the
+    /// next one that is not.
+    #[tokio::test]
+    async fn a_failing_sub_collector_does_not_fail_the_system_scrape() {
+        struct Failing;
+
+        impl Collector for Failing {
+            fn name(&self) -> &'static str {
+                "system.failing"
+            }
+
+            fn register_metrics(&self, _registry: &Registry) -> Result<()> {
+                Ok(())
+            }
+
+            fn collect_once<'a>(&'a self, _pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
+                Box::pin(async move { Err(anyhow::anyhow!("sub-collector exploded")) })
+            }
+
+            fn reset_metrics(&self) {}
+        }
+
+        let collector = SystemCollector {
+            subs: vec![Arc::new(Failing)],
+        };
+
+        // Lazy: the stub never touches the pool, so no server has to exist.
+        let pool = MySqlPool::connect_lazy("mysql://root@127.0.0.1:3306/mysql")
+            .expect("a lazy pool needs no server");
+
+        let result = collector.collect_once(&pool).await;
+
+        assert!(
+            result.is_ok(),
+            "a failing system sub-collector must not fail the umbrella, or the registry would \
+             withhold every database-dependent family: {result:?}"
+        );
+    }
+
+    /// A sub-collector *panic* must not fail the umbrella either.
+    ///
+    /// The Err-swallowing contract above only holds for panics because the umbrella wraps
+    /// each sub future in `catch_unwind`: an uncaught panic unwinds through the
+    /// `FuturesUnordered` drain to the registry's own boundary, which marks the whole
+    /// `system` collector failed — and a failed collector withholds every
+    /// database-dependent family for that scrape. The real subs panic only inside
+    /// `blocking::offload_coalesced` (which converts to `Err` on its own); this stub
+    /// panics in the async glue, the one place a real sub could still unwind through the
+    /// umbrella.
+    #[tokio::test]
+    #[allow(clippy::panic)]
+    async fn a_panicking_sub_collector_does_not_fail_the_system_scrape() {
+        struct Panicking;
+
+        impl Collector for Panicking {
+            fn name(&self) -> &'static str {
+                "system.panicking"
+            }
+
+            fn register_metrics(&self, _registry: &Registry) -> Result<()> {
+                Ok(())
+            }
+
+            fn collect_once<'a>(&'a self, _pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
+                Box::pin(async move { panic!("sub exploded") })
+            }
+
+            fn reset_metrics(&self) {}
+        }
+
+        let collector = SystemCollector {
+            subs: vec![Arc::new(Panicking)],
+        };
+
+        // Lazy: the stub never touches the pool, so no server has to exist.
+        let pool = MySqlPool::connect_lazy("mysql://root@127.0.0.1:3306/mysql")
+            .expect("a lazy pool needs no server");
+
+        let result = collector.collect_once(&pool).await;
+
+        assert!(
+            result.is_ok(),
+            "a panicking system sub-collector must not fail the umbrella: {result:?}"
+        );
+    }
+
+    /// A sub-collector that panics *synchronously* while constructing its future must be
+    /// contained just like a panic inside the future.
+    ///
+    /// Wrapping only the returned future is not enough: evaluating `sub.collect(pool)`
+    /// happens before any future exists, so an overridden `collect` — or a synchronous
+    /// panic while constructing that future — escapes the umbrella. Deferring the call
+    /// into the wrapped `async` block puts construction inside the boundary.
+    #[tokio::test]
+    #[allow(clippy::panic)]
+    async fn a_sub_panic_while_constructing_its_future_is_contained() {
+        struct PanickingConstructor;
+
+        impl Collector for PanickingConstructor {
+            fn name(&self) -> &'static str {
+                "system.panicking_constructor"
+            }
+
+            fn register_metrics(&self, _registry: &Registry) -> Result<()> {
+                Ok(())
+            }
+
+            fn collect_once<'a>(&'a self, _pool: &'a MySqlPool) -> BoxFuture<'a, Result<Collected>> {
+                Box::pin(async move { Ok(Collected::Fresh) })
+            }
+
+            fn reset_metrics(&self) {}
+
+            fn collect<'a>(&'a self, _pool: &'a MySqlPool) -> BoxFuture<'a, Result<()>> {
+                panic!("sub exploded while constructing collect future")
+            }
+        }
+
+        let collector = SystemCollector {
+            subs: vec![Arc::new(PanickingConstructor)],
+        };
+
+        // Lazy: the stub never touches the pool, so no server has to exist.
+        let pool = MySqlPool::connect_lazy("mysql://root@127.0.0.1:3306/mysql")
+            .expect("a lazy pool needs no server");
+
+        let result = collector.collect_once(&pool).await;
+
+        assert!(
+            result.is_ok(),
+            "future-construction panic must degrade to a sub-collector warning: {result:?}"
+        );
     }
 }

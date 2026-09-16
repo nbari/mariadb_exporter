@@ -13,9 +13,9 @@ pub async fn handle(action: Action) -> Result<()> {
             port,
             listen,
             dsn,
-            collectors,
+            config,
         } => {
-            new(port, listen, dsn, collectors).await?;
+            new(port, listen, dsn, config).await?;
         }
     }
 
@@ -25,7 +25,9 @@ pub async fn handle(action: Action) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::collectors::{config::CollectorConfig, system::ProcessMemorySource};
     use secrecy::SecretString;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn test_handle_action_signature() {
@@ -33,7 +35,7 @@ mod tests {
             port: 9999,
             listen: None,
             dsn: SecretString::new("invalid-dsn".into()),
-            collectors: vec!["default".to_string()],
+            config: CollectorConfig::new().with_enabled(&["default".to_string()]),
         };
 
         let result = handle(action).await;
@@ -47,7 +49,10 @@ mod tests {
             port: 9306,
             listen: Some("127.0.0.1".to_string()),
             dsn: SecretString::new("mysql://root@localhost:3306/mysql".into()),
-            collectors: vec!["default".to_string(), "exporter".to_string()],
+            config: CollectorConfig::new()
+                .with_enabled(&["default".to_string(), "exporter".to_string()])
+                .with_scrape_timeout(Duration::from_millis(1_234))
+                .with_system_process_memory(ProcessMemorySource::Pss),
         };
 
         match action {
@@ -55,13 +60,15 @@ mod tests {
                 port,
                 listen,
                 dsn: _,
-                collectors,
+                config,
             } => {
                 assert_eq!(port, 9306);
                 assert_eq!(listen, Some("127.0.0.1".to_string()));
-                assert_eq!(collectors.len(), 2);
-                assert!(collectors.contains(&"default".to_string()));
-                assert!(collectors.contains(&"exporter".to_string()));
+                assert_eq!(config.enabled_collectors.len(), 2);
+                assert!(config.enabled_collectors.contains("default"));
+                assert!(config.enabled_collectors.contains("exporter"));
+                assert_eq!(config.scrape_timeout, Duration::from_millis(1_234));
+                assert_eq!(config.system.process_memory, ProcessMemorySource::Pss);
             }
         }
     }
@@ -73,12 +80,16 @@ mod tests {
             port: 8080,
             listen: None,
             dsn: SecretString::new("mysql://localhost:3306/mysql".into()),
-            collectors: vec![],
+            config: CollectorConfig::new().with_enabled(&[]),
         };
 
         match action {
-            Action::Run { collectors, .. } => {
-                assert_eq!(collectors.len(), 0, "Should allow empty collectors list");
+            Action::Run { config, .. } => {
+                assert_eq!(
+                    config.enabled_collectors.len(),
+                    0,
+                    "Should allow empty collectors list"
+                );
             }
         }
     }

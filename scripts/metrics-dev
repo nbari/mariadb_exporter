@@ -31,20 +31,57 @@ project_dir="$(
 compose_file="$project_dir/.devcontainer/compose.yaml"
 
 # DevPod overrides the compose `name:` with its own project, so discover the real
-# project name from the running containers. When several devcontainers run at once
-# (e.g. another exporter's), matching only `-app-1` is ambiguous — so pick the
-# project that has BOTH an `-app-1` and this repo's `-mariadb-1` service.
+# project name from the running containers. Compose labels are stable across Docker
+# Compose (which normally uses hyphens in container names) and podman-compose (which
+# normally uses underscores). When labels are unavailable, fall back to both naming
+# conventions. In either case require this repo's app and mariadb services to share
+# a project so another running exporter's app container cannot be selected.
 project=""
-for app_ctr in $("$cmd" ps --format '{{.Names}}' 2>/dev/null | grep -E -- '-app-1$'); do
-    proj="${app_ctr%-app-1}"
-    if "$cmd" ps --format '{{.Names}}' 2>/dev/null | grep -qE "^${proj}-mariadb-1$"; then
-        project="$proj"
-        break
-    fi
+app_projects="$(
+    "$cmd" ps --filter label=com.docker.compose.service=app \
+        --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null || true
+)"
+mariadb_projects="$(
+    "$cmd" ps --filter label=com.docker.compose.service=mariadb \
+        --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null || true
+)"
+for app_project in $app_projects; do
+    for mariadb_project in $mariadb_projects; do
+        if [ "$app_project" = "$mariadb_project" ]; then
+            project="$app_project"
+            break 2
+        fi
+    done
 done
+
+if [ -z "$project" ]; then
+    running_names="$("$cmd" ps --format '{{.Names}}' 2>/dev/null || true)"
+    for app_ctr in $running_names; do
+        case "$app_ctr" in
+        *_app_1)
+            proj="${app_ctr%_app_1}"
+            mariadb_ctr="${proj}_mariadb_1"
+            ;;
+        *-app-1)
+            proj="${app_ctr%-app-1}"
+            mariadb_ctr="${proj}-mariadb-1"
+            ;;
+        *)
+            continue
+            ;;
+        esac
+
+        for running_ctr in $running_names; do
+            if [ "$running_ctr" = "$mariadb_ctr" ]; then
+                project="$proj"
+                break 2
+            fi
+        done
+    done
+fi
 if [ -z "$project" ]; then
     echo "Error: mariadb_exporter devcontainer not running" >&2
-    echo "  (looked for a compose project with both '<project>-app-1' and '<project>-mariadb-1')." >&2
+    echo "  (looked for one compose project containing both app and mariadb services)." >&2
     echo "Start the workspace first:  ./scripts/dev-up" >&2
     exit 1
 fi
