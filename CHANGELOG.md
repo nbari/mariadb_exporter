@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0]
+
+### Changed
+- Make OpenTelemetry/OTLP an opt-in `telemetry` Cargo feature. Standard binaries, packages, and container images omit it and ignore OTEL environment variables, with a startup stderr warning if an endpoint is configured (independent of the log filter, and without printing the endpoint or headers). Existing trace users must rebuild with `--features telemetry`. Prometheus metrics, local logs, request spans, and `x-request-id` stay available in both builds. `--version` reports `telemetry: enabled` or `telemetry: disabled`. `just watch telemetry` and `Containerfile` `CARGO_FEATURES=telemetry` build the opt-in image. CI, Clippy, and `just test` validate both configurations. Release builds pass `--no-default-features` so a future default feature cannot silently return to published artifacts.
+- Upgrade the OpenTelemetry stack to 0.33 (`opentelemetry`, `opentelemetry-otlp`, `opentelemetry_sdk`, `opentelemetry-http`) and `tracing-opentelemetry` to 0.34. `opentelemetry-otlp` 0.33 removed the `tls` feature alias; the exporter now selects `tls-ring` plus `tls-roots`.
+- Refresh the locked dependency tree, including `serde_with` 3.24, `quinn-proto` 0.11.19, and the yanked `yoke-derive` 0.8.3 to 0.8.4. `cargo audit` is clean.
+
+### Fixed
+- Declare `otel.status_code` on the HTTP request span so `on_response` actually records success and 5xx instead of discarding the update. `response_records_status_on_request_span` fails if the field is removed.
+- Carry the request span into blocking OS samples. A `spawn_blocking` worker has no inherited span stack, so `blocking::offload` now runs the sample inside `Span::current().in_scope`. `blocking_sample_preserves_request_span` fails if that guard is dropped. Both tests use `tests/support/trace_capture.rs`.
+
 ## [0.9.0]
 
 ### Fixed

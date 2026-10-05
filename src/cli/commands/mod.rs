@@ -3,6 +3,7 @@ use clap::{
     Arg, ArgAction, ColorChoice, Command,
     builder::styling::{AnsiColor, Effects, Styles},
 };
+use std::sync::LazyLock;
 
 mod collectors;
 
@@ -14,6 +15,19 @@ pub mod built_info {
 /// CLI spelling of [`DEFAULT_SCRAPE_TIMEOUT_MS`]. Kept in sync by
 /// `scrape_timeout_default_matches_const`.
 const SCRAPE_TIMEOUT_MS_DEFAULT: &str = "15000";
+
+static LONG_VERSION: LazyLock<String> = LazyLock::new(|| {
+    let git_hash = built_info::GIT_COMMIT_HASH.unwrap_or("unknown");
+    let telemetry = if cfg!(feature = "telemetry") {
+        "enabled"
+    } else {
+        "disabled"
+    };
+    format!(
+        "{} - {git_hash} (telemetry: {telemetry})",
+        env!("CARGO_PKG_VERSION")
+    )
+});
 
 /// Flags that shape how a scrape is executed, rather than what it collects.
 fn scrape_runtime_args(cmd: Command) -> Command {
@@ -75,14 +89,10 @@ pub fn new() -> Command {
         .literal(AnsiColor::Blue.on_default() | Effects::BOLD)
         .placeholder(AnsiColor::Green.on_default());
 
-    let git_hash = built_info::GIT_COMMIT_HASH.unwrap_or("unknown");
-    let long_version: &'static str =
-        Box::leak(format!("{} - {}", env!("CARGO_PKG_VERSION"), git_hash).into_boxed_str());
-
     let cmd = Command::new("mariadb_exporter")
         .about("MariaDB metric exporter for Prometheus")
         .version(env!("CARGO_PKG_VERSION"))
-        .long_version(long_version)
+        .long_version(LONG_VERSION.as_str())
         .color(ColorChoice::Auto)
         .styles(styles)
         .arg(
@@ -579,6 +589,12 @@ mod tests {
         // Should include version and git hash separated by " - "
         assert!(long_version.contains(env!("CARGO_PKG_VERSION")));
         assert!(long_version.contains(" - "));
+        let capability = if cfg!(feature = "telemetry") {
+            "enabled"
+        } else {
+            "disabled"
+        };
+        assert!(long_version.contains(&format!("telemetry: {capability}")));
     }
 
     #[test]

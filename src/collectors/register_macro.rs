@@ -147,7 +147,7 @@ mod tests {
     fn test_collector_names_exist() {
         let names = crate::collectors::COLLECTOR_NAMES;
 
-        assert!(!names.is_empty());
+        assert_ne!(names.len(), 0);
         assert!(names.len() >= 2);
 
         // Check expected collectors are present

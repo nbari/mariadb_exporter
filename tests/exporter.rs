@@ -92,7 +92,7 @@ async fn test_exporter_metrics_endpoint() -> Result<()> {
     assert_eq!(response.status(), 200);
 
     let body = response.text().await?;
-    assert!(!body.is_empty());
+    assert_ne!(body, "");
     assert!(body.contains("mariadb_"));
 
     handle.abort();

@@ -84,12 +84,14 @@ fn assert_exercises_every_collector(path: &str, snippet: &str) {
 }
 
 /// Returns the body of a `just` recipe, i.e. the recipe line plus every
-/// following indented line.
+/// following indented line. Accepts a parameterized header such as `watch features="":`.
 fn just_recipe(justfile: &str, recipe: &str) -> String {
     let header = format!("\n{recipe}:");
-    let Some(start) = justfile.find(&header) else {
-        panic!("recipe `{recipe}` not found in .justfile");
-    };
+    let parameterized = format!("\n{recipe} ");
+    let start = justfile
+        .find(&header)
+        .or_else(|| justfile.find(&parameterized))
+        .unwrap_or_else(|| panic!("recipe `{recipe}` not found in .justfile"));
     let body = justfile.get(start + 1..).unwrap_or_default();
 
     let mut collected = String::new();

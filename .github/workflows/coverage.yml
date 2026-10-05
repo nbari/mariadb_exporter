@@ -56,7 +56,7 @@ jobs:
           # - Exporter HTTP server tests (8)
           # - Dashboard validation tests (3)
           # - Smoke tests (2)
-          cargo test --verbose -- --nocapture
+          cargo test --locked --all-features --verbose -- --nocapture
         env:
           MARIADB_EXPORTER_DSN: mysql://root:root@127.0.0.1:3306/mysql
           RUST_BACKTRACE: full

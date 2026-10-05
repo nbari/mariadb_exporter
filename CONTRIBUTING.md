@@ -77,7 +77,27 @@ MARIADB_EXPORTER_DSN="mysql://root:root@127.0.0.1:3306/mysql" \
 `just test` detects a reachable MariaDB at `MARIADB_HOST:MARIADB_PORT` (default
 `127.0.0.1:3306`) and only starts a container when one is not already running. It
 honors a pre-set `MARIADB_EXPORTER_DSN` (this is what lets the devcontainer point at
-the `mariadb` service), falling back to the local default when unset.
+the `mariadb` service), falling back to the local default when unset. It checks both
+the default build and `--features telemetry`.
+
+### Optional Telemetry
+
+The default build excludes the OTLP exporter and its dependencies. Build with
+`cargo build --features telemetry` when debugging with distributed traces. An
+`OTEL_EXPORTER_OTLP_ENDPOINT` and `-v`/`RUST_LOG=info` are also needed at runtime;
+see [the README](README.md#optional-opentelemetry-tracing). `mariadb_exporter --version`
+reports whether support was compiled in. Without the feature, a configured
+`OTEL_EXPORTER_OTLP_ENDPOINT` produces a single startup warning on stderr and never
+prints the endpoint or authentication values.
+
+Keep OTLP initialization in `src/cli/telemetry/otlp.rs` and HTTP trace propagation
+in `src/exporter/telemetry.rs`, both gated by `#[cfg(feature = "telemetry")]`.
+Ordinary `tracing` instrumentation, request IDs, and local logging must remain
+available without that feature. Prometheus metrics are not part of the optional
+telemetry stack.
+
+`just clippy` checks default and all-feature configurations; `just test` runs both
+test suites.
 
 See [tests/TESTING.md](tests/TESTING.md) for detailed patterns and examples.
 

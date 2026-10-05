@@ -77,7 +77,7 @@ jobs:
       # Build once for Linux (musl)
       - name: Build Linux (musl)
         if: matrix.build == 'linux'
-        run: cargo build --release --locked --target ${{ matrix.target }}
+        run: cargo build --release --locked --no-default-features --target ${{ matrix.target }}
 
       # Strip once and prep paths for both packagers
       - name: Strip and prepare packaging paths (Linux)
@@ -110,7 +110,7 @@ jobs:
       # Non-Linux builds (macOS)
       - name: Build
         if: matrix.build != 'linux'
-        run: cargo build --release --locked --target ${{ matrix.target }}
+        run: cargo build --release --locked --no-default-features --target ${{ matrix.target }}
 
       - name: Build archive
         shell: bash

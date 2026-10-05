@@ -63,8 +63,11 @@ jobs:
 
       - name: Build (Linux musl)
         if: matrix.build == 'linux'
-        run: cargo build --release --locked --target ${{ matrix.target }}
+        run: cargo build --release --locked --no-default-features --target ${{ matrix.target }}
 
       - name: Build
         if: matrix.build != 'linux'
-        run: cargo build --release --locked --target ${{ matrix.target }}
+        run: cargo build --release --locked --no-default-features --target ${{ matrix.target }}
+
+      - name: Build with telemetry
+        run: cargo build --release --locked --features telemetry --target ${{ matrix.target }}

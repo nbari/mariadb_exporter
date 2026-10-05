@@ -27,11 +27,13 @@ test: clippy fmt
     scripts/setup-local-test-db.sh || (echo "❌ Test database setup failed. Fix the issues above before running tests." && exit 1); \
   fi
   @echo "🔧 Using local test database (honoring a pre-set MARIADB_EXPORTER_DSN)..."
-  MARIADB_EXPORTER_DSN="${MARIADB_EXPORTER_DSN:-mysql://root@127.0.0.1:3306/mysql}" cargo test -- --nocapture
+  MARIADB_EXPORTER_DSN="${MARIADB_EXPORTER_DSN:-mysql://root@127.0.0.1:3306/mysql}" cargo test --locked -- --nocapture
+  MARIADB_EXPORTER_DSN="${MARIADB_EXPORTER_DSN:-mysql://root@127.0.0.1:3306/mysql}" cargo test --locked --features telemetry -- --nocapture
 
 # Linting
 clippy:
-  cargo clippy --all-targets --all-features
+  cargo clippy --locked --all-targets
+  cargo clippy --locked --all-targets --all-features
 
 # CI runs `dtolnay/rust-toolchain@stable`, so it always uses the newest stable
 # clippy. Each release adds lints, and this repo denies `clippy::pedantic`, so a
@@ -66,7 +68,7 @@ fmt:
 
 # Coverage report
 coverage:
-  CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE='coverage-%p-%m.profraw' cargo test
+  CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE='coverage-%p-%m.profraw' cargo test --all-features
   grcov . --binary-path ./target/debug/deps/ -s . -t html --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o target/coverage/html
   firefox target/coverage/html/index.html
   rm -rf *.profraw
@@ -302,9 +304,9 @@ t-deploy message="CI test": check-develop check-clean test
     echo "🧹 To remove it:"
     echo "   git push origin :refs/tags/${tag} && git tag -d ${tag}"
 
-# Watch for changes and run
-watch:
-  cargo watch -x 'run -- --collector.default --collector.exporter --collector.tls --collector.query_response_time --collector.statements --collector.schema --collector.replication --collector.locks --collector.metadata --collector.userstat --collector.innodb --collector.system -v'
+# Watch for changes and run. `just watch telemetry` rebuilds with OTLP enabled.
+watch features="":
+  cargo watch -x "run --features '{{features}}' -- --collector.default --collector.exporter --collector.tls --collector.query_response_time --collector.statements --collector.schema --collector.replication --collector.locks --collector.metadata --collector.userstat --collector.innodb --collector.system -v"
 
 # Bring up the on-demand devcontainer observability stack (Prometheus + Grafana).
 # Defined behind the "observability" profile in .devcontainer/compose.yaml so a plain

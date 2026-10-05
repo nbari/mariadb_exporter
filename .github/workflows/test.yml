@@ -66,8 +66,10 @@ jobs:
           components: clippy
           targets: x86_64-unknown-freebsd, x86_64-unknown-illumos
 
-      - name: Clippy
-        run: cargo clippy --all-targets --all-features
+      - name: Clippy (both feature configurations)
+        run: |
+          cargo clippy --locked --all-targets
+          cargo clippy --locked --all-targets --all-features
 
       # The system collector cfg-gates its process and CPU sampling per platform, and
       # `warnings = "deny"` turns a field read on only one of them into a compile error.
@@ -79,7 +81,9 @@ jobs:
       # `--all-targets --all-features`; that pulls in dev-only `aws-lc-sys`, which needs a
       # real cross C toolchain.
       - name: Clippy (FreeBSD)
-        run: cargo clippy --target x86_64-unknown-freebsd
+        run: |
+          cargo clippy --locked --target x86_64-unknown-freebsd
+          cargo clippy --locked --target x86_64-unknown-freebsd --features telemetry
 
       # A target that is neither Linux nor FreeBSD, so it compiles the
       # `cfg(not(any(target_os = "linux", target_os = "freebsd")))` fallbacks that report
@@ -89,7 +93,9 @@ jobs:
         env:
           AR_x86_64_unknown_illumos: ar
           CC_x86_64_unknown_illumos: cc
-        run: cargo clippy --target x86_64-unknown-illumos
+        run: |
+          cargo clippy --locked --target x86_64-unknown-illumos
+          cargo clippy --locked --target x86_64-unknown-illumos --features telemetry
 
   check:
     name: Check
@@ -114,12 +120,23 @@ jobs:
         with:
           targets: x86_64-unknown-freebsd
 
-      - name: Check
-        run: cargo check
+      - name: Check both feature configurations
+        run: |
+          cargo check --locked
+          cargo check --locked --features telemetry
+
+      - name: Verify default runtime dependencies exclude OTLP
+        shell: bash
+        run: |
+          tree=$(cargo tree --locked --no-default-features --edges normal --prefix none --format '{p}')
+          if printf '%s\n' "$tree" | grep -E '^(opentelemetry[^ ]*|tracing-opentelemetry|tonic[^ ]*) v'; then
+            echo 'Default builds must not include OpenTelemetry or tonic' >&2
+            exit 1
+          fi
 
       # Compile the FreeBSD sysctl readers that no other job builds.
       - name: Check (FreeBSD)
-        run: cargo check --target x86_64-unknown-freebsd
+        run: cargo check --locked --target x86_64-unknown-freebsd
 
   test:
     name: Test (MariaDB ${{ matrix.mariadb }})
@@ -195,4 +212,5 @@ jobs:
           # - Exporter HTTP server tests (8)
           # - Dashboard validation tests (3)
           # - Smoke tests (2)
-          cargo test
+          cargo test --locked
+          cargo test --locked --features telemetry

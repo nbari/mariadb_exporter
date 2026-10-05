@@ -612,7 +612,7 @@ mod tests {
             .find(|m| m.name() == "mariadb_exporter_collector_scrape_duration_seconds")
             .expect("duration metric should exist");
 
-        assert!(!duration_metric.get_metric().is_empty());
+        assert_ne!(duration_metric.get_metric(), []);
     }
 
     #[test]
@@ -634,7 +634,7 @@ mod tests {
             .find(|m| m.name() == "mariadb_exporter_collector_scrape_errors_total")
             .expect("error metric should exist");
 
-        assert!(!error_metric.get_metric().is_empty());
+        assert_ne!(error_metric.get_metric(), []);
     }
 
     #[test]

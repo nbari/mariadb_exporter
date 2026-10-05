@@ -15,6 +15,7 @@ MariaDB metrics exporter for Prometheus written in Rust.
 * **Low footprint** – Designed to minimize cardinality and avoid expensive scans.
 * **Resilient** – Serves `/metrics` (HTTP 200) even when MariaDB is unreachable. During an outage, `mariadb_up` becomes `0`, and DB-dependent metrics are omitted to avoid stale data. Only an overload of the exporter itself is signalled with a status code — see [Scrape concurrency and timeout](#scrape-concurrency-and-timeout).
 * **No stale data** – A collector never serves a previous scrape's values as current. If its source becomes unavailable (plugin uninstalled, `performance_schema` table missing, feature disabled, privilege revoked) the series it owned *disappear* instead of freezing. See [Scrape outcomes](#scrape-outcomes).
+* **Optional tracing** – OpenTelemetry/OTLP is a default-off Cargo feature. Release binaries keep local logs and `x-request-id`; rebuild with `--features telemetry` for OTLP. See [Optional OpenTelemetry tracing](#optional-opentelemetry-tracing).
 
 ## Download or build
 
@@ -318,6 +319,38 @@ mariadb_exporter
 
 Each collector lives in its own subdirectory for clarity and easy extension.
 
+## Optional OpenTelemetry tracing
+
+OpenTelemetry/OTLP support is a **default-off Cargo feature**. Standard release
+binaries, packages, and container images omit it. Prometheus metrics, local logs
+(`RUST_LOG` / `-v`), request spans, and `x-request-id` correlation remain available
+in every build.
+
+| Build | Endpoint configured | Behavior |
+| --- | --- | --- |
+| Default | No | Local logging only |
+| Default | Yes | Local logging only; startup warning that OTEL configuration is ignored |
+| `--features telemetry` | No | Local logging only; no exporter is started |
+| `--features telemetry` | Yes | Local logging plus OTLP/gRPC traces, incoming trace context, and `x-trace-id` responses for active traces |
+
+```sh
+cargo build --release --features telemetry
+./target/release/mariadb_exporter --version  # reports telemetry: enabled
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
+  ./target/release/mariadb_exporter -v
+```
+
+Only OTLP/gRPC is supported. Optional `OTEL_EXPORTER_OTLP_HEADERS` supplies
+comma-separated `key=value` authentication metadata; HTTPS uses native certificate
+roots. A default build warns once on stderr when `OTEL_EXPORTER_OTLP_ENDPOINT` is
+set and never prints the endpoint or header values.
+
+For a custom telemetry-enabled image:
+
+```sh
+podman build -f Containerfile --build-arg CARGO_FEATURES=telemetry -t mariadb-exporter:telemetry .
+```
+
 ## Testing
 
 > **Zero-setup option:** the repo ships a compose-based
@@ -350,9 +383,10 @@ Test with Unix socket connection (production-like setup):
 just test-socket
 ```
 
-Lint:
+Lint both the default build and the telemetry feature:
 
 ```bash
+cargo clippy --all-targets
 cargo clippy --all-targets --all-features
 ```
 
