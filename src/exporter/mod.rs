@@ -27,6 +27,8 @@ use tower_http::{
 use tracing::{Span, error, info, info_span, warn};
 use ulid::Ulid;
 
+const POOL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
+
 mod handlers;
 mod shutdown;
 #[cfg(feature = "telemetry")]
@@ -78,9 +80,15 @@ pub async fn new(
 
     info!("shutting down");
 
+    let closed = tokio::time::timeout(POOL_SHUTDOWN_TIMEOUT, pool.close())
+        .await
+        .with_context(|| {
+            format!("closing MariaDB pool exceeded timeout of {POOL_SHUTDOWN_TIMEOUT:?}")
+        });
+
     shutdown_tracer();
 
-    Ok(())
+    closed
 }
 
 fn connect_pool(dsn: &SecretString) -> Result<sqlx::MySqlPool> {

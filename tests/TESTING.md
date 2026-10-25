@@ -211,6 +211,22 @@ async fn test_collector_with_realistic_data() -> Result<()> {
 }
 ```
 
+## Connection Teardown Regression
+
+`tests/connection_teardown.rs` starts an isolated MariaDB container with a generated
+TLS certificate and a populated user schema. On Unix it runs the actual exporter
+binary over plaintext and TLS 1.3, scrapes five times, and sends SIGTERM while pooled
+sessions are live. It requires a successful exit, no increase in `Aborted_clients`,
+no remaining exporter sessions, and a `Quit` record for each session in the general log.
+
+```sh
+MARIADB_EXPORTER_REQUIRE_TESTCONTAINERS=1 cargo test --locked --test connection_teardown
+```
+
+Set `DOCKER_HOST` to a Docker/Podman socket if needed. The test skips locally only
+when no runtime is available and it has not been explicitly required; CI requires
+the runtime. Existing databases and certificates are not modified.
+
 ## Common Pitfalls and Solutions
 
 ### 1. Type Mismatches (CRITICAL)

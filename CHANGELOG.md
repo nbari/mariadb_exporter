@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0]
+
+### Fixed
+- Close the shared MariaDB pool gracefully after normal HTTP server shutdown, with a two-second limit. Previously SIGTERM dropped live sessions without sending `COM_QUIT`, increasing `Aborted_clients` and producing server warnings over plaintext and TLS. Unlike [pg_exporter#41](https://github.com/nbari/pg_exporter/issues/41), normal scrapes use the shared pool and do not create per-database connections. The new subprocess regression verifies clean disconnects over plaintext and TLS 1.3.
+
+### Changed
+- Refresh dependency requirements and the lockfile, including Tokio 1.54.1, rustls 0.23.46, rustls-webpki 0.103.16, ctutils 0.4.5, and webpki roots 1.0.11. Update the optional OpenTelemetry crates to 0.33.1.
+
 ## [0.10.0]
 
 ### Changed

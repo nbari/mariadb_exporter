@@ -87,7 +87,9 @@ created at startup and passed to every collector's `collect(&pool)`.
   shared pool.
 - For the rare case where a collector must run a query **in the context of another
   database**, use the ephemeral helper `util::open_db_connection(datname)` — it opens
-  a bare connection closed on drop, never cached.
+  a bare connection, never cached. Await `sqlx::Connection::close` after both
+  successful and failed queries for graceful protocol/TLS shutdown; drop closes
+  the socket on cancellation.
 - **Do not add a per-database/per-schema connection or pool cache** — it pins one
   persistent connection per database and can exhaust `max_connections`. The invariant
   is locked by `tests/collectors/connection.rs`.

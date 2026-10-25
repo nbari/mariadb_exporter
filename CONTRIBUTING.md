@@ -145,7 +145,9 @@ connection), MariaDB exposes **all schemas from one connection** via
   ordinary queries against `information_schema` on the shared pool.
 - For the rare case where a collector must run a query **in the context of another
   database**, use the ephemeral helper `util::open_db_connection(datname)` — it opens
-  a bare connection that is **closed on drop** and is never cached.
+  a bare connection that is never cached. Call `sqlx::Connection::close().await` on
+  both successful and failed queries for graceful protocol/TLS shutdown; dropping
+  the connection closes its socket as a cancellation fallback.
 - **Do not introduce a per-database/per-schema connection or pool cache.** Caching
   pins one persistent connection per database and can exhaust `max_connections` on
   large or connection-constrained servers. This invariant is locked by

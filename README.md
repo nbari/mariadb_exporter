@@ -290,6 +290,10 @@ An honest zero is still published where zero is a fact — for example `mariadb_
 when TLS is genuinely not in use, or `mariadb_replica_configured 0` on a server with no
 replication. A zero is never published to stand in for "could not read".
 
+On normal shutdown (SIGINT or SIGTERM on Unix), the exporter drains its HTTP server,
+then waits up to two seconds for the shared MariaDB pool to close gracefully, including
+TLS shutdown. Exceeding that pool-close limit returns an error and a nonzero exit status.
+
 ## Project layout
 
 ```

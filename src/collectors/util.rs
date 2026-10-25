@@ -312,7 +312,8 @@ pub fn connect_options_for_db(datname: &str) -> Result<MySqlConnectOptions> {
 /// Open a fresh connection to the specified non-default database.
 ///
 /// Connections are intentionally **not** pooled or cached: the caller runs a single scrape
-/// query and drops the connection, which closes it. This keeps the exporter's per-database
+/// query and calls `sqlx::Connection::close` on both success and error to close gracefully.
+/// Dropping the connection still closes its socket when cancelled. This keeps the per-database
 /// connection footprint bounded and independent of the number of databases, instead of
 /// pinning one persistent connection per database (which would exhaust `max_connections` on
 /// large or connection-constrained clusters). The default database must use the shared pool

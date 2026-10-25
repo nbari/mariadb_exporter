@@ -1,3 +1,5 @@
+pub mod containers;
+
 use anyhow::Result;
 use sqlx::mysql::{MySqlPool, MySqlPoolOptions};
 use std::env;
@@ -28,6 +30,8 @@ pub async fn create_test_pool() -> Result<MySqlPool> {
 
 /// Get an available port for testing
 #[allow(dead_code)]
+// Failure to bind a test fixture's ephemeral port is a test setup failure.
+#[allow(clippy::expect_used)]
 pub fn get_available_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
         .expect("Failed to bind to ephemeral port")
